@@ -12,6 +12,7 @@ entre les sessions.
 | Navigation : pincer / pan 2 doigts / double-tap / ajustement écran / mini-carte | ✅ |
 | Mesures contraintes H ou V, avec accrochage sur les tracés du PDF | ✅ |
 | Échelle **par page** + calibration sur une cote imprimée | ✅ |
+| Sélecteur de page à vignettes pour les PDF multi-pages | ✅ |
 | Mesure manuelle + grille magnétique (repli pour les PDF scannés) | ✅ |
 | Mobilier : rectangles cotés en dimensions réelles, rotation 90°, couleur, étiquette | ✅ |
 | Sauvegarde locale automatique (IndexedDB + stockage persistant) | ✅ |
@@ -246,8 +247,16 @@ intersections entre la ligne de cote et les tracés du plan — on obtient donc 
 distance exacte de mur à mur. Si le PDF est un scan, l'app le détecte à l'import,
 signale l'absence de tracés et active la grille magnétique.
 
+**Documents multi-pages** : à l'import, l'app affiche les pages en vignettes et
+demande laquelle ouvrir — un numéro de page ne dit rien sur un carnet, il faut
+voir la planche. Seule la page choisie est chargée et indexée, puis son échelle
+est demandée dans la foulée. Chaque vignette rappelle l'échelle déjà réglée et
+le nombre d'annotations posées.
+
 **Échelle** : elle est enregistrée **par page**, parce qu'un carnet de détails
-change d'échelle d'une planche à l'autre.
+change d'échelle d'une planche à l'autre. Tant qu'une page n'a pas été
+calibrée, le bouton *Échelle* affiche un **« ? »** encadré d'orange : la valeur
+affichée n'est qu'un héritage de la page précédente, pas une mesure fiable.
 
 ---
 

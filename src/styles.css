@@ -606,6 +606,82 @@ select {
   padding: 10px 18px;
 }
 
+/* ── Sélecteur de page ──────────────────────────────────────────────────── */
+
+.wide-dlg {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.page-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  max-height: 56vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px;
+}
+
+.page-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.page-card[aria-current='true'] {
+  border-color: var(--accent);
+}
+
+.page-card:active {
+  background: #161d27;
+}
+
+.page-card .thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+  border-radius: 6px;
+  background: #f4f6f9;
+  overflow: hidden;
+}
+
+.page-card .thumb canvas {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.page-card .thumb.loading {
+  background: #1d2530;
+}
+
+.page-card .caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.page-card .caption em {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.scale-warn {
+  border-color: #b4791d !important;
+}
+
 .warn {
   margin: 0 0 14px;
   padding: 10px 12px;

@@ -66,12 +66,50 @@ try {
     const bin = atob(b64);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    await window.planViewer.importPdf('plan-test.pdf', bytes.buffer, { type: 'file' });
-    // Le dialogue d'échelle s'ouvre automatiquement après l'import.
-    document.getElementById('dlg-scale')?.close('cancel');
+    // Volontairement sans await : le sélecteur de page attend une interaction.
+    window.planViewer.importPdf('plan-test.pdf', bytes.buffer, { type: 'file' });
   }, pdfBytes);
 
+  // ── Sélecteur de page (document à 2 pages) ────────────────────────────
+  await page.waitForFunction(() => document.getElementById('dlg-page').open, null, { timeout: 20_000 });
+  const cards = await page.locator('#page-grid .page-card').count();
+  check('Sélecteur de page proposé à l’import', cards === 2, `${cards} page(s) proposée(s)`);
+  await page.waitForFunction(
+    () => document.querySelectorAll('#page-grid .thumb canvas').length === 2,
+    null,
+    { timeout: 20_000 },
+  );
+  check('Vignettes des pages rendues', true);
+
+  // On choisit la page 2, pour vérifier que l'import ouvre bien la page demandée.
+  await page.locator('#page-grid .page-card').nth(1).click();
   await page.waitForFunction(() => Boolean(window.planViewer.state.plan), null, { timeout: 20_000 });
+  check(
+    'Page choisie ouverte directement',
+    (await page.evaluate(() => window.planViewer.state.layers.pageIndex)) === 1,
+  );
+
+  // Le dialogue d'échelle suit immédiatement, pour la page choisie.
+  await page.waitForFunction(() => document.getElementById('dlg-scale').open, null, { timeout: 10_000 });
+  check(
+    'Échelle demandée pour la page choisie',
+    (await page.textContent('#scale-page-label')).includes('page 2'),
+    await page.textContent('#scale-page-label'),
+  );
+  await page.evaluate(() => document.getElementById('dlg-scale').close('cancel'));
+  check(
+    'Échelle non confirmée signalée',
+    (await page.textContent('#scale-label')).includes('?'),
+    await page.textContent('#scale-label'),
+  );
+
+  // Retour sur la page 1 pour la suite des vérifications.
+  await page.evaluate(async () => {
+    const v = window.planViewer.view;
+    await v.setPage(0, { restoreView: false });
+    v.layer.scale = { mode: 'ratio', ratio: 50 };
+    v.layer.scaleSet = true;
+  });
   check('PDF importé et ouvert', true, await page.evaluate(() => window.planViewer.state.plan.name));
 
   // ── Extraction des tracés vectoriels (accrochage) ─────────────────────
@@ -133,6 +171,7 @@ try {
     const v = window.planViewer.view;
     await v.setPage(1, { restoreView: false });
     v.layer.scale = { mode: 'ratio', ratio: 10 };
+    v.layer.scaleSet = true;
     v.addFurniture({ label: 'Détail', lengthMm: 500, widthMm: 200, color: '#f59e0b' });
     return {
       measures: v.layer.measures.length,

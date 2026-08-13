@@ -14,17 +14,19 @@ export const LAYERS_VERSION = 2;
  * unique pour tout le document donnerait des cotes fausses sans prévenir.
  */
 export function emptyPageLayer(scale = defaultScale()) {
-  return { scale, view: null, measures: [], furniture: [] };
+  // `scaleSet` distingue une échelle *choisie* d'une valeur par défaut héritée :
+  // tant qu'elle est fausse, l'app réclame confirmation avant de laisser mesurer.
+  return { scale, scaleSet: false, view: null, measures: [], furniture: [] };
 }
 
 /** Calque vierge pour un plan qui vient d'être importé. */
-export function emptyLayers(planId) {
+export function emptyLayers(planId, pageIndex = 0) {
   return {
     planId,
     version: LAYERS_VERSION,
-    pageIndex: 0,
+    pageIndex,
     unit: 'auto',
-    pages: { 0: emptyPageLayer() },
+    pages: { [pageIndex]: emptyPageLayer() },
     updatedAt: Date.now(),
   };
 }
@@ -58,6 +60,8 @@ function migrateLayers(layers, planId) {
     pages: {
       [index]: {
         scale: layers.scale || defaultScale(),
+        scaleSet: true, // une échelle enregistrée en v1 avait été choisie
+
         view: layers.view || null,
         measures: layers.measures || [],
         furniture: layers.furniture || [],
@@ -71,7 +75,7 @@ function migrateLayers(layers, planId) {
  * Enregistre un PDF importé.
  * @param {{name:string, bytes:ArrayBuffer, source?:object, pageCount?:number}} input
  */
-export async function createPlan({ name, bytes, source = { type: 'file' }, pageCount = 1 }) {
+export async function createPlan({ name, bytes, source = { type: 'file' }, pageCount = 1, pageIndex = 0 }) {
   const plan = {
     id: uid(),
     name,
@@ -83,7 +87,7 @@ export async function createPlan({ name, bytes, source = { type: 'file' }, pageC
     updatedAt: Date.now(),
   };
   await idb.put('plans', plan);
-  const layers = emptyLayers(plan.id);
+  const layers = emptyLayers(plan.id, pageIndex);
   await idb.put('layers', layers);
   return { plan, layers };
 }

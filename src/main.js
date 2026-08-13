@@ -18,6 +18,7 @@ import { calibrationScale, effectiveRatio, formatScale, mmPerPt, toMm } from './
 import { DriveClient } from './drive/google.js';
 import { buildAnnotatedPdf, exportFileName } from './export/exportPdf.js';
 import { loadPdfDocument } from './pdf/loader.js';
+import { renderThumbnails } from './pdf/thumbnails.js';
 import { isStandalone, registerServiceWorker } from './pwa/updates.js';
 import { renderInspector } from './ui/inspector.js';
 import { $, confirmAction, formatBytes, formatDate, openDialog, toast } from './ui/ui.js';
@@ -185,20 +186,38 @@ async function importPdf(name, bytes, source) {
     toast('Fichier vide ou illisible.', { error: true });
     return;
   }
+  let probe = null;
   try {
     setBusy('Lecture du PDF…');
     // Validation avant écriture : inutile de stocker un fichier illisible.
-    const probe = await loadPdfDocument(bytes);
+    probe = await loadPdfDocument(bytes);
     const pageCount = probe.pdf.numPages;
-    await probe.destroy();
 
-    const { plan } = await createPlan({ name, bytes, source, pageCount });
+    // Sur un document à plusieurs pages, on demande laquelle ouvrir *avant*
+    // de charger quoi que ce soit : inutile de rendre et d'indexer une page
+    // dont l'utilisateur ne veut pas (une planche A3 coûte ~1 s).
+    let pageIndex = 0;
+    if (pageCount > 1) {
+      setBusy(null);
+      pageIndex = await openPagePicker(probe.pdf, { context: 'import' });
+      if (pageIndex === null) {
+        await probe.destroy();
+        return;
+      }
+    }
+
+    setBusy('Ouverture du plan…');
+    const { plan } = await createPlan({ name, bytes, source, pageCount, pageIndex });
+    await probe.destroy();
+    probe = null;
+
     await openPlan(plan.id);
     await refreshRecentList();
     openScaleDialog({ firstTime: true });
   } catch (err) {
     console.error(err);
     setBusy(null);
+    await probe?.destroy().catch(() => {});
     toast(`PDF illisible : ${err.message}`, { error: true });
   }
 }
@@ -328,7 +347,21 @@ function refreshInspector() {
 }
 
 function syncScaleUi() {
-  $('scale-label').textContent = state.layers ? formatScale(currentLayer().scale) : 'Échelle';
+  const button = $('btn-scale');
+  if (!state.layers) {
+    $('scale-label').textContent = 'Échelle';
+    button.classList.remove('scale-warn');
+    button.title = '';
+    return;
+  }
+  const layer = currentLayer();
+  // Tant que l'échelle n'a pas été confirmée pour cette page, elle n'est qu'une
+  // valeur héritée : le « ? » évite de mesurer en croyant l'échelle établie.
+  $('scale-label').textContent = `${formatScale(layer.scale)}${layer.scaleSet ? '' : ' ?'}`;
+  button.classList.toggle('scale-warn', !layer.scaleSet);
+  button.title = layer.scaleSet
+    ? 'Échelle confirmée pour cette page'
+    : 'Échelle non confirmée pour cette page — calibrez sur une cote imprimée';
 }
 
 async function refreshRecentList() {
@@ -430,7 +463,13 @@ async function openScaleDialog({ firstTime = false, calibration = false } = {}) 
     return;
   }
   if (result !== 'ok') {
-    if (firstTime) toast(`Échelle conservée : ${formatScale(currentLayer().scale)}`);
+    if (firstTime) {
+      toast(
+        `Échelle non confirmée pour cette page (${formatScale(currentLayer().scale)} supposée) — le bouton Échelle reste marqué « ? ».`,
+        { duration: 5000 },
+      );
+      syncScaleUi();
+    }
     return;
   }
 
@@ -445,7 +484,9 @@ async function openScaleDialog({ firstTime = false, calibration = false } = {}) 
     );
     return;
   }
-  currentLayer().scale = next;
+  const layer = currentLayer();
+  layer.scale = next;
+  layer.scaleSet = true;
   state.layers.unit = $('unit-display').value;
   calibrationLengthPt = null;
   view.refresh();
@@ -612,21 +653,93 @@ async function openLibrary() {
   $('dlg-library').showModal();
 }
 
+/**
+ * Sélecteur de page, avec vignettes.
+ *
+ * Sur un carnet, un numéro de page ne dit rien : il faut voir la planche. Les
+ * vignettes sont rendues une par une et le rendu s'arrête dès la fermeture du
+ * dialogue, pour ne pas occuper l'iPad inutilement.
+ *
+ * @param {import('pdfjs-dist').PDFDocumentProxy} pdf
+ * @param {{context: 'import'|'switch'}} options
+ * @returns {Promise<number|null>} index de page choisi, ou null si annulé
+ */
+async function openPagePicker(pdf, { context = 'switch' } = {}) {
+  const dialog = $('dlg-page');
+  const grid = $('page-grid');
+  const current = context === 'switch' ? (state.layers?.pageIndex ?? 0) : null;
+
+  $('page-title').textContent =
+    context === 'import' ? `Quelle page ouvrir ? (${pdf.numPages} pages)` : 'Changer de page';
+  $('page-hint').textContent =
+    context === 'import'
+      ? 'Chaque page a sa propre échelle et ses propres annotations. Vous pourrez changer de page à tout moment (menu ⋯).'
+      : 'L’échelle et les annotations affichées sont celles de la page choisie.';
+  $('page-cancel').textContent = context === 'import' ? 'Annuler l’import' : 'Annuler';
+
+  const thumbs = [];
+  grid.replaceChildren();
+  for (let i = 0; i < pdf.numPages; i++) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'page-card';
+    card.setAttribute('aria-current', String(i === current));
+
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb loading';
+    thumbs.push(thumb);
+
+    const caption = document.createElement('div');
+    caption.className = 'caption';
+    const label = document.createElement('span');
+    label.textContent = `Page ${i + 1}`;
+    const note = document.createElement('em');
+    note.textContent = describePage(i);
+    caption.append(label, note);
+
+    card.append(thumb, caption);
+    card.addEventListener('click', () => dialog.close(String(i)));
+    grid.append(card);
+  }
+
+  let closed = false;
+  renderThumbnails(
+    pdf,
+    (index, canvas) => {
+      thumbs[index]?.replaceChildren(canvas);
+      thumbs[index]?.classList.remove('loading');
+    },
+    { shouldStop: () => closed },
+  );
+
+  const result = await openDialog(dialog);
+  closed = true;
+
+  const index = Number(result);
+  return Number.isInteger(index) && index >= 0 && index < pdf.numPages ? index : null;
+}
+
+/** Résumé d'une page pour le sélecteur : échelle réglée et annotations posées. */
+function describePage(index) {
+  const layer = state.layers?.pages?.[String(index)];
+  if (!layer) return '';
+  const parts = [];
+  if (layer.scaleSet) parts.push(formatScale(layer.scale));
+  const count = layer.measures.length + layer.furniture.length;
+  if (count) parts.push(`${count} annot.`);
+  return parts.join(' · ');
+}
+
+/** Change de page depuis le menu, puis réclame l'échelle si elle est inconnue. */
 async function openPageDialog() {
   if (!state.pdf) return;
-  const select = $('page-select');
-  select.replaceChildren();
-  for (let i = 0; i < state.pdf.numPages; i++) {
-    const option = document.createElement('option');
-    option.value = String(i);
-    option.textContent = `Page ${i + 1}`;
-    option.selected = i === (state.layers.pageIndex ?? 0);
-    select.append(option);
-  }
-  if ((await openDialog($('dlg-page'))) !== 'ok') return;
+  const index = await openPagePicker(state.pdf, { context: 'switch' });
+  if (index === null || index === state.layers.pageIndex) return;
+  await showPage(index);
+}
 
-  const index = Number(select.value);
-  if (index === state.layers.pageIndex) return;
+/** Affiche une page et demande son échelle si elle n'a jamais été confirmée. */
+async function showPage(index) {
   await autosave.flush();
   state.vectorSegments = null;
   setBusy(`Ouverture de la page ${index + 1}…`);
@@ -636,6 +749,10 @@ async function openPageDialog() {
   syncScaleUi();
   updateStatus();
   refreshInspector();
+
+  // Une page jamais calibrée hérite d'une échelle *supposée* : on demande
+  // confirmation plutôt que de laisser mesurer avec une valeur héritée.
+  if (!currentLayer().scaleSet) openScaleDialog({ firstTime: true });
 }
 
 // ─────────────────────────────────────────────────────────────────────────

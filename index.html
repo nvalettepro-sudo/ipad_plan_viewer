@@ -299,20 +299,16 @@
       </form>
     </dialog>
 
-    <dialog class="dlg" id="dlg-page">
+    <dialog class="dlg wide-dlg" id="dlg-page">
       <form method="dialog">
-        <h2>Changer de page</h2>
-        <p class="hint">
-          Les annotations sont enregistrées par page : changer de page affiche le
-          calque correspondant.
+        <h2 id="page-title">Quelle page ouvrir&nbsp;?</h2>
+        <p class="hint" id="page-hint">
+          Chaque page a sa propre échelle et ses propres annotations. Vous pourrez
+          changer de page à tout moment (menu&nbsp;⋯).
         </p>
-        <div class="row">
-          <label for="page-select">Page</label>
-          <select id="page-select"></select>
-        </div>
+        <div class="page-grid" id="page-grid"></div>
         <menu>
-          <button class="btn" value="cancel">Annuler</button>
-          <button class="btn primary" value="ok">Afficher</button>
+          <button class="btn" value="cancel" id="page-cancel">Annuler</button>
         </menu>
       </form>
     </dialog>
