@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <!-- maximum-scale + user-scalable=no : désactive le zoom natif Safari, qui
+         entrerait en conflit avec le pincement géré par l'app (contrainte iPad n°3).
+         viewport-fit=cover : nécessaire pour que env(safe-area-inset-*) soit utile. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="description" content="Visualisation, mesure et annotation de plans d'architecture PDF sur iPad." />
+    <meta name="theme-color" content="#11161d" />
+
+    <title>Plans</title>
+
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/favicon.png" sizes="any" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+
+    <!-- Mode standalone iOS : sans ces balises, l'app installée garde une barre
+         Safari et ne bénéficie pas de la persistance des données (contrainte n°1). -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Plans" />
+    <meta name="format-detection" content="telephone=no" />
+  </head>
+
+  <body>
+    <div id="app">
+      <!-- ── Barre d'outils ─────────────────────────────────────────────── -->
+      <header class="toolbar" id="toolbar">
+        <div class="toolbar-group">
+          <button class="btn" id="btn-open" type="button">
+            <span class="ico">📂</span><span class="lbl">Ouvrir</span>
+          </button>
+          <button class="btn" id="btn-drive" type="button">
+            <span class="ico">☁️</span><span class="lbl">Drive</span>
+          </button>
+        </div>
+
+        <div class="toolbar-group tools" role="group" aria-label="Outils">
+          <button class="btn tool" id="tool-pan" data-tool="pan" type="button" aria-pressed="true">
+            <span class="ico">✋</span><span class="lbl">Naviguer</span>
+          </button>
+          <button class="btn tool" id="tool-select" data-tool="select" type="button" aria-pressed="false">
+            <span class="ico">👆</span><span class="lbl">Sélection</span>
+          </button>
+          <button class="btn tool" id="tool-measure" data-tool="measure" type="button" aria-pressed="false">
+            <span class="ico">📏</span><span class="lbl">Mesurer</span>
+          </button>
+          <button class="btn" id="btn-add-furniture" type="button">
+            <span class="ico">🛋️</span><span class="lbl">Meuble</span>
+          </button>
+        </div>
+
+        <div class="toolbar-group">
+          <button class="btn" id="btn-fit" type="button" title="Ajuster à l'écran">
+            <span class="ico">⤢</span><span class="lbl">Ajuster</span>
+          </button>
+          <button class="btn" id="btn-scale" type="button">
+            <span class="ico">⚖️</span><span class="lbl" id="scale-label">Échelle</span>
+          </button>
+          <button class="btn" id="btn-export" type="button">
+            <span class="ico">⬇️</span><span class="lbl">Export</span>
+          </button>
+          <button class="btn" id="btn-menu" type="button" title="Menu"><span class="ico">⋯</span></button>
+        </div>
+      </header>
+
+      <!-- ── Zone de rendu du plan ──────────────────────────────────────── -->
+      <main class="stage" id="stage">
+        <canvas id="viewport-canvas"></canvas>
+
+        <div class="empty-state" id="empty-state">
+          <h1>Plans d'architecture</h1>
+          <p>Importez un PDF depuis Google&nbsp;Drive ou depuis vos fichiers pour commencer.</p>
+          <div class="empty-actions">
+            <button class="btn primary" id="empty-drive" type="button">Importer depuis Drive</button>
+            <button class="btn" id="empty-open" type="button">Ouvrir un fichier</button>
+          </div>
+          <ul class="recent" id="recent-list" hidden></ul>
+        </div>
+
+        <!-- Mini-carte (affichée automatiquement en zoom fort) -->
+        <div class="minimap" id="minimap" hidden>
+          <canvas id="minimap-canvas"></canvas>
+          <div class="minimap-view" id="minimap-view"></div>
+        </div>
+
+        <!-- Indicateur de mesure en cours / sélection -->
+        <div class="hud" id="hud" hidden></div>
+
+        <div class="zoom-badge" id="zoom-badge" hidden>100 %</div>
+
+        <!-- Panneau d'édition de l'objet sélectionné -->
+        <aside class="inspector" id="inspector" hidden>
+          <div class="inspector-head">
+            <strong id="inspector-title">Objet</strong>
+            <button class="icon-btn" id="inspector-close" type="button" aria-label="Fermer">✕</button>
+          </div>
+          <div class="inspector-body" id="inspector-body"></div>
+        </aside>
+      </main>
+
+      <!-- ── Barre d'état ───────────────────────────────────────────────── -->
+      <footer class="statusbar" id="statusbar">
+        <span id="status-doc">Aucun plan</span>
+        <span class="spacer"></span>
+        <label class="chk" title="Accrochage sur les tracés du PDF">
+          <input type="checkbox" id="chk-snap" checked /> Accrochage
+        </label>
+        <label class="chk" title="Grille magnétique (repli si le PDF n'est pas vectoriel)">
+          <input type="checkbox" id="chk-grid" /> Grille
+        </label>
+        <span id="status-save" class="save-state"></span>
+      </footer>
+    </div>
+
+    <!-- ── Bandeau de mise à jour PWA ───────────────────────────────────── -->
+    <div class="update-banner" id="update-banner" hidden>
+      <span>Mise à jour disponible</span>
+      <button class="btn primary" id="update-reload" type="button">Recharger</button>
+      <button class="icon-btn" id="update-dismiss" type="button" aria-label="Plus tard">✕</button>
+    </div>
+
+    <div class="toast-stack" id="toast-stack"></div>
+
+    <!-- ── Boîtes de dialogue ───────────────────────────────────────────── -->
+    <dialog class="dlg" id="dlg-scale">
+      <form method="dialog">
+        <h2>Échelle du plan</h2>
+        <p class="hint">
+          L'échelle sert à convertir les distances du PDF en dimensions réelles.
+        </p>
+
+        <fieldset class="radio-group">
+          <label><input type="radio" name="scale-mode" value="ratio" checked /> Échelle connue</label>
+          <div class="row indent" id="scale-ratio-row">
+            <span>1 /</span>
+            <input type="number" id="scale-ratio" min="1" step="1" value="50" inputmode="numeric" />
+            <div class="presets">
+              <button class="chip" type="button" data-ratio="20">1/20</button>
+              <button class="chip" type="button" data-ratio="50">1/50</button>
+              <button class="chip" type="button" data-ratio="100">1/100</button>
+              <button class="chip" type="button" data-ratio="200">1/200</button>
+            </div>
+          </div>
+
+          <label><input type="radio" name="scale-mode" value="calibration" /> Calibrer sur une cote connue</label>
+          <div class="indent" id="scale-calib-row">
+            <p class="hint">
+              Tracez un segment sur une cote dont vous connaissez la longueur réelle,
+              puis saisissez cette longueur. Utile si le PDF a été redimensionné à l'impression.
+            </p>
+            <button class="btn" type="button" id="scale-calib-start">Tracer le segment de référence</button>
+            <div class="row">
+              <input type="number" id="scale-calib-value" min="0" step="0.1" placeholder="Longueur réelle" inputmode="decimal" />
+              <select id="scale-calib-unit">
+                <option value="cm">cm</option>
+                <option value="m" selected>m</option>
+                <option value="mm">mm</option>
+              </select>
+            </div>
+            <p class="hint" id="scale-calib-info"></p>
+          </div>
+        </fieldset>
+
+        <div class="row">
+          <label for="unit-display">Unité d'affichage</label>
+          <select id="unit-display">
+            <option value="auto" selected>Automatique (m / cm)</option>
+            <option value="m">Mètres</option>
+            <option value="cm">Centimètres</option>
+            <option value="mm">Millimètres</option>
+          </select>
+        </div>
+
+        <p class="hint" id="scale-preview"></p>
+
+        <menu>
+          <button class="btn" value="cancel">Annuler</button>
+          <button class="btn primary" value="ok" id="scale-ok">Appliquer</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog class="dlg" id="dlg-furniture">
+      <form method="dialog">
+        <h2 id="furniture-title">Nouveau meuble</h2>
+        <div class="row">
+          <label for="furniture-name">Nom</label>
+          <input type="text" id="furniture-name" placeholder="Canapé" maxlength="40" />
+        </div>
+        <div class="row">
+          <label for="furniture-length">Longueur</label>
+          <input type="number" id="furniture-length" min="1" step="1" value="200" inputmode="decimal" />
+          <select id="furniture-unit">
+            <option value="cm" selected>cm</option>
+            <option value="m">m</option>
+            <option value="mm">mm</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="furniture-width">Largeur</label>
+          <input type="number" id="furniture-width" min="1" step="1" value="90" inputmode="decimal" />
+        </div>
+        <div class="row">
+          <label>Couleur</label>
+          <div class="swatches" id="furniture-colors"></div>
+        </div>
+        <menu>
+          <button class="btn" value="cancel">Annuler</button>
+          <button class="btn primary" value="ok">Valider</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog class="dlg" id="dlg-menu">
+      <form method="dialog">
+        <h2>Menu</h2>
+        <ul class="menu-list">
+          <li><button class="btn wide" type="button" id="menu-library">Mes plans</button></li>
+          <li><button class="btn wide" type="button" id="menu-page">Changer de page…</button></li>
+          <li><button class="btn wide" type="button" id="menu-clear">Effacer toutes les annotations</button></li>
+          <li><button class="btn wide" type="button" id="menu-google">Configuration Google Drive…</button></li>
+          <li><button class="btn wide" type="button" id="menu-storage">État du stockage</button></li>
+          <li><button class="btn wide" type="button" id="menu-install">Installer sur l'écran d'accueil</button></li>
+        </ul>
+        <p class="hint" id="menu-version"></p>
+        <menu><button class="btn" value="close">Fermer</button></menu>
+      </form>
+    </dialog>
+
+    <dialog class="dlg" id="dlg-library">
+      <form method="dialog">
+        <h2>Mes plans</h2>
+        <ul class="library-list" id="library-list"></ul>
+        <menu><button class="btn" value="close">Fermer</button></menu>
+      </form>
+    </dialog>
+
+    <dialog class="dlg" id="dlg-google">
+      <form method="dialog">
+        <h2>Configuration Google Drive</h2>
+        <p class="hint">
+          Ces identifiants proviennent de votre projet Google&nbsp;Cloud (scope
+          <code>drive.file</code>, écran de consentement en mode « Test »). Ils sont
+          stockés uniquement sur cet appareil.
+        </p>
+        <div class="row col">
+          <label for="g-client-id">ID client OAuth</label>
+          <input type="text" id="g-client-id" placeholder="xxxxx.apps.googleusercontent.com" autocomplete="off" />
+        </div>
+        <div class="row col">
+          <label for="g-api-key">Clé API (restreinte par domaine)</label>
+          <input type="text" id="g-api-key" placeholder="AIza…" autocomplete="off" />
+        </div>
+        <div class="row col">
+          <label for="g-app-id">Numéro de projet (App ID)</label>
+          <input type="text" id="g-app-id" placeholder="123456789012" inputmode="numeric" autocomplete="off" />
+        </div>
+        <p class="hint" id="g-origin"></p>
+        <menu>
+          <button class="btn" value="cancel">Annuler</button>
+          <button class="btn primary" value="ok">Enregistrer</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog class="dlg" id="dlg-export">
+      <form method="dialog">
+        <h2>PDF annoté prêt</h2>
+        <p class="hint" id="export-info"></p>
+        <p class="hint">
+          « Partager » ouvre la feuille iOS : vous pouvez enregistrer dans Fichiers
+          ou renvoyer le PDF vers Google&nbsp;Drive.
+        </p>
+        <menu>
+          <button class="btn" value="close">Fermer</button>
+          <button class="btn" type="button" id="export-download">Télécharger</button>
+          <button class="btn primary" type="button" id="export-share">Partager</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog class="dlg" id="dlg-page">
+      <form method="dialog">
+        <h2>Changer de page</h2>
+        <p class="hint">
+          Les annotations sont enregistrées par page : changer de page affiche le
+          calque correspondant.
+        </p>
+        <div class="row">
+          <label for="page-select">Page</label>
+          <select id="page-select"></select>
+        </div>
+        <menu>
+          <button class="btn" value="cancel">Annuler</button>
+          <button class="btn primary" value="ok">Afficher</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog class="dlg" id="dlg-install">
+      <form method="dialog">
+        <h2>Installer sur l'écran d'accueil</h2>
+        <ol class="steps">
+          <li>Ouvrez cette page dans <strong>Safari</strong> sur l'iPad.</li>
+          <li>Appuyez sur l'icône <strong>Partager</strong> (carré avec flèche vers le haut).</li>
+          <li>Choisissez <strong>« Sur l'écran d'accueil »</strong>.</li>
+          <li>Confirmez le nom, puis <strong>Ajouter</strong>.</li>
+          <li>Lancez ensuite l'app <strong>depuis son icône</strong>, pas depuis Safari.</li>
+        </ol>
+        <p class="hint">
+          C'est le mode « standalone » qui protège vos annotations : les données d'un
+          simple onglet Safari sont effacées après 7 jours sans visite.
+        </p>
+        <p class="hint" id="install-state"></p>
+        <menu><button class="btn primary" value="close">Compris</button></menu>
+      </form>
+    </dialog>
+
+    <dialog class="dlg" id="dlg-confirm">
+      <form method="dialog">
+        <h2 id="confirm-title">Confirmer</h2>
+        <p id="confirm-text"></p>
+        <menu>
+          <button class="btn" value="cancel">Annuler</button>
+          <button class="btn danger" value="ok">Confirmer</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <input type="file" id="file-input" accept="application/pdf,.pdf" hidden />
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

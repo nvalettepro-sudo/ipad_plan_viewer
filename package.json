@@ -1,0 +1,22 @@
+{
+  "name": "ipad-plan-viewer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PWA de visualisation, mesure et annotation de plans d'architecture PDF sur iPad",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "icons": "node scripts/generate-icons.mjs",
+    "test:smoke": "node scripts/smoke-test.mjs"
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "5.4.624"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1",
+    "vite": "^8.2.1"
+  }
+}

@@ -1,0 +1,35 @@
+# Dépendances
+node_modules/
+
+# Build
+dist/
+dist-ssr/
+.vite/
+
+# Configuration locale (clés Google, etc.)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Hébergeurs
+.netlify/
+.vercel/
+
+# OS / éditeurs
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Fichiers de test locaux
+/tmp-test/
+*.local.pdf

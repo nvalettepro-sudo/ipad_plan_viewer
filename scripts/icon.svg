@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Icône de l'app : un plan schématique coté, sur fond bleu nuit. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b2b3f" />
+      <stop offset="1" stop-color="#0d1622" />
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#bg)" />
+
+  <!-- Trame de fond -->
+  <g stroke="#2f4358" stroke-width="2">
+    <path d="M64 0V512M128 0V512M192 0V512M256 0V512M320 0V512M384 0V512M448 0V512" />
+    <path d="M0 64H512M0 128H512M0 192H512M0 256H512M0 320H512M0 384H512M0 448H512" />
+  </g>
+
+  <!-- Murs -->
+  <g fill="none" stroke="#f2f6fb" stroke-width="20" stroke-linejoin="round" stroke-linecap="square">
+    <path d="M104 128H408V376H104Z" />
+    <path d="M264 128V264M264 264H408" />
+  </g>
+
+  <!-- Ouverture (porte) -->
+  <path d="M104 300V232" stroke="#1b2b3f" stroke-width="24" stroke-linecap="butt" />
+  <path d="M104 232a68 68 0 0 1 68 68" fill="none" stroke="#8fb4d9" stroke-width="10" />
+
+  <!-- Ligne de cote -->
+  <g stroke="#4da3ff" stroke-width="12" stroke-linecap="round">
+    <path d="M104 424H408" />
+    <path d="M104 404V444M408 404V444" />
+  </g>
+</svg>
