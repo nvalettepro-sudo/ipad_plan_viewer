@@ -2,9 +2,11 @@ name: Déploiement GitHub Pages
 
 # Chaque push sur la branche principale republie l'app : il suffit ensuite de
 # rouvrir la PWA sur l'iPad pour voir apparaître le bandeau « Mise à jour ».
+# Le filtre est volontairement large : le job ne s'exécute que sur la branche
+# par défaut du dépôt (voir `if` ci-dessous), quel que soit son nom.
 on:
   push:
-    branches: [main]
+    branches: ['**']
   workflow_dispatch:
 
 permissions:
@@ -18,6 +20,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.ref_name == github.event.repository.default_branch || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

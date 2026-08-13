@@ -114,7 +114,7 @@ le service worker, ni l'installation.
 ### GitHub Pages (aucun compte tiers)
 
 Le workflow [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml)
-publie à chaque `push` sur `main`.
+publie à chaque `push` sur la **branche par défaut** du dépôt, quel que soit son nom.
 
 1. Dépôt → **Settings → Pages → Source : GitHub Actions**.
 2. Optionnel, pour préremplir les identifiants Google : **Settings → Secrets and
@@ -124,6 +124,15 @@ publie à chaque `push` sur `main`.
 
 Le workflow positionne `BASE_PATH=/<dépôt>/` : indispensable, sinon les assets et
 le service worker renvoient des 404 sous GitHub Pages.
+
+> ⚠️ **Dépôt privé + GitHub Pages** : sur un compte GitHub Free, Pages ne publie
+> que depuis un dépôt **public**. Si vous passez le dépôt en privé (recommandé
+> pour ne pas exposer la configuration), déployez plutôt sur **Netlify** ou
+> **Vercel** : leurs offres gratuites acceptent les dépôts privés.
+>
+> Notez que dans tous les cas, l'application publiée est accessible à qui
+> connaît l'URL : ce sont vos *plans importés* qui restent privés, puisqu'ils ne
+> quittent jamais l'iPad.
 
 ### Netlify / Vercel
 
