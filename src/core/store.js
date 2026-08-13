@@ -4,17 +4,66 @@ import { uid } from './geometry.js';
 import { idb } from './idb.js';
 import { defaultScale } from './units.js';
 
+export const LAYERS_VERSION = 2;
+
+/**
+ * Calque vierge d'une page.
+ *
+ * L'échelle est stockée **par page** : un carnet de détails mélange couramment
+ * plusieurs échelles (un 1/10 en page 1, un 1/20 en page 2…). Une échelle
+ * unique pour tout le document donnerait des cotes fausses sans prévenir.
+ */
+export function emptyPageLayer(scale = defaultScale()) {
+  return { scale, view: null, measures: [], furniture: [] };
+}
+
 /** Calque vierge pour un plan qui vient d'être importé. */
 export function emptyLayers(planId) {
   return {
     planId,
+    version: LAYERS_VERSION,
     pageIndex: 0,
-    scale: defaultScale(),
     unit: 'auto',
-    view: null,
-    measures: [],
-    furniture: [],
+    pages: { 0: emptyPageLayer() },
     updatedAt: Date.now(),
+  };
+}
+
+/**
+ * Renvoie le calque d'une page, en le créant au besoin.
+ * Une nouvelle page hérite de l'échelle de la page courante : c'est le point de
+ * départ le plus probable, l'utilisateur ajuste ensuite si besoin.
+ */
+export function pageLayer(layers, index) {
+  const key = String(index);
+  if (!layers.pages[key]) {
+    const current = layers.pages[String(layers.pageIndex)];
+    layers.pages[key] = emptyPageLayer(structuredClone(current?.scale || defaultScale()));
+  }
+  return layers.pages[key];
+}
+
+/** Migre un calque enregistré par une version antérieure. */
+function migrateLayers(layers, planId) {
+  if (!layers) return emptyLayers(planId);
+  if (layers.version === LAYERS_VERSION && layers.pages) return layers;
+
+  // v1 : une seule échelle et une seule liste d'annotations pour tout le document.
+  const index = layers.pageIndex ?? 0;
+  return {
+    planId,
+    version: LAYERS_VERSION,
+    pageIndex: index,
+    unit: layers.unit || 'auto',
+    pages: {
+      [index]: {
+        scale: layers.scale || defaultScale(),
+        view: layers.view || null,
+        measures: layers.measures || [],
+        furniture: layers.furniture || [],
+      },
+    },
+    updatedAt: layers.updatedAt || Date.now(),
   };
 }
 
@@ -51,7 +100,7 @@ export async function listPlans() {
 export async function loadPlan(id) {
   const plan = await idb.get('plans', id);
   if (!plan) return null;
-  const layers = (await idb.get('layers', id)) || emptyLayers(id);
+  const layers = migrateLayers(await idb.get('layers', id), id);
   return { plan, layers };
 }
 

@@ -81,9 +81,7 @@ try {
 
   // ── Échelle 1/50 : 600 pt doivent valoir 10,58 m ──────────────────────
   const realMm = await page.evaluate(() => {
-    const { mmPerPt } = window.planViewer.state.layers.scale.mode === 'ratio' ? {} : {};
-    void mmPerPt;
-    const scale = window.planViewer.state.layers.scale;
+    const scale = window.planViewer.view.layer.scale;
     return 600 * (25.4 / 72) * scale.ratio;
   });
   check('Conversion d’échelle correcte', Math.abs(realMm - 10583.3) < 1, `${(realMm / 1000).toFixed(2)} m`);
@@ -98,7 +96,7 @@ try {
   await page.mouse.move(box.x + box.width * 0.6, y + 2, { steps: 8 });
   await page.mouse.up();
 
-  const measures = await page.evaluate(() => window.planViewer.state.layers.measures);
+  const measures = await page.evaluate(() => window.planViewer.view.layer.measures);
   check('Cote créée au geste', measures.length === 1, `${measures.length} cote(s)`);
   if (measures.length === 1) {
     check('Cote contrainte à l’horizontale', Math.abs(measures[0].a.y - measures[0].b.y) < 1e-6);
@@ -108,7 +106,7 @@ try {
   await page.evaluate(() =>
     window.planViewer.view.addFurniture({ label: 'Canapé', lengthMm: 2000, widthMm: 900, color: '#4da3ff' }),
   );
-  const furniture = await page.evaluate(() => window.planViewer.state.layers.furniture);
+  const furniture = await page.evaluate(() => window.planViewer.view.layer.furniture);
   check('Meuble ajouté', furniture.length === 1 && furniture[0].lengthMm === 2000);
 
   // ── Persistance IndexedDB ─────────────────────────────────────────────
@@ -119,13 +117,44 @@ try {
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean(window.planViewer?.state.plan), null, { timeout: 20_000 });
   const restored = await page.evaluate(() => ({
-    measures: window.planViewer.state.layers.measures.length,
-    furniture: window.planViewer.state.layers.furniture.length,
+    measures: window.planViewer.view.layer.measures.length,
+    furniture: window.planViewer.view.layer.furniture.length,
   }));
   check(
     'Annotations rechargées après redémarrage',
     restored.measures === 1 && restored.furniture === 1,
     JSON.stringify(restored),
+  );
+
+  // ── Isolation des calques par page ────────────────────────────────────
+  // Un carnet de détails mélange les échelles d'une page à l'autre : les
+  // annotations et l'échelle ne doivent jamais déborder sur la page voisine.
+  const pageTwo = await page.evaluate(async () => {
+    const v = window.planViewer.view;
+    await v.setPage(1, { restoreView: false });
+    v.layer.scale = { mode: 'ratio', ratio: 10 };
+    v.addFurniture({ label: 'Détail', lengthMm: 500, widthMm: 200, color: '#f59e0b' });
+    return {
+      measures: v.layer.measures.length,
+      furniture: v.layer.furniture.length,
+      ratio: v.layer.scale.ratio,
+    };
+  });
+  check(
+    'Page 2 : calque indépendant',
+    pageTwo.measures === 0 && pageTwo.furniture === 1 && pageTwo.ratio === 10,
+    JSON.stringify(pageTwo),
+  );
+
+  const pageOne = await page.evaluate(async () => {
+    const v = window.planViewer.view;
+    await v.setPage(0, { restoreView: true });
+    return { measures: v.layer.measures.length, furniture: v.layer.furniture.length, ratio: v.layer.scale.ratio };
+  });
+  check(
+    'Page 1 : calque et échelle intacts',
+    pageOne.measures === 1 && pageOne.furniture === 1 && pageOne.ratio === 50,
+    JSON.stringify(pageOne),
   );
 
   // ── Export PDF annoté ─────────────────────────────────────────────────
@@ -137,7 +166,7 @@ try {
   const exportedBytes = Uint8Array.from(exported);
   check('Export PDF non vide', exportedBytes.length > 1000, `${exportedBytes.length} octets`);
   const reparsed = await PDFDocument.load(exportedBytes);
-  check('PDF exporté relisible', reparsed.getPageCount() === 1);
+  check('PDF exporté relisible', reparsed.getPageCount() === 2, `${reparsed.getPageCount()} page(s)`);
   const [w, h] = [reparsed.getPage(0).getWidth(), reparsed.getPage(0).getHeight()];
   check('Format de page conservé', Math.abs(w - 842) < 1 && Math.abs(h - 595) < 1, `${w}×${h} pt`);
 

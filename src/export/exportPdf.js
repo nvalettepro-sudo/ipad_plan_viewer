@@ -8,7 +8,7 @@
 
 import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
 import { rectCorners } from '../core/geometry.js';
-import { formatLength, formatScale, mmPerPt } from '../core/units.js';
+import { formatLength, mmPerPt } from '../core/units.js';
 
 const MEASURE_RGB = [0.84, 0.16, 0.16];
 const TICK_LENGTH = 4; // points PDF
@@ -72,17 +72,34 @@ function drawCenteredText(page, font, text, cx, cy, { color, pageRotation }) {
  */
 export async function buildAnnotatedPdf({ bytes, layers, name = 'plan' }) {
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
-  const pageIndex = Math.min(layers.pageIndex ?? 0, doc.getPageCount() - 1);
-  const page = doc.getPage(pageIndex);
   const font = await doc.embedFont(StandardFonts.Helvetica);
-  const pageRotation = page.getRotation().angle % 360;
-
-  const scale = layers.scale;
   const unit = layers.unit || 'auto';
+
+  // Chaque page porte ses propres annotations et sa propre échelle : on les
+  // traite toutes, pas seulement celle affichée à l'écran.
+  for (const [key, layer] of Object.entries(layers.pages || {})) {
+    const index = Number(key);
+    if (!Number.isInteger(index) || index >= doc.getPageCount()) continue;
+    if (!layer.measures?.length && !layer.furniture?.length) continue;
+    drawLayerOnPage(doc.getPage(index), layer, { font, unit });
+  }
+
+  doc.setTitle(`${name} — annoté`);
+  doc.setProducer('Plan Viewer');
+  doc.setModificationDate(new Date());
+
+  const output = await doc.save({ useObjectStreams: false });
+  return new Blob([output], { type: 'application/pdf' });
+}
+
+/** Dessine les annotations d'un calque sur sa page. */
+function drawLayerOnPage(page, layer, { font, unit }) {
+  const pageRotation = page.getRotation().angle % 360;
+  const scale = layer.scale;
   const perMm = 1 / mmPerPt(scale);
 
   // ── Meubles ───────────────────────────────────────────────────────────
-  for (const item of layers.furniture || []) {
+  for (const item of layer.furniture || []) {
     const w = item.lengthMm * perMm;
     const h = item.widthMm * perMm;
     const color = hexToRgbTriplet(item.color);
@@ -122,7 +139,7 @@ export async function buildAnnotatedPdf({ bytes, layers, name = 'plan' }) {
   }
 
   // ── Cotes ─────────────────────────────────────────────────────────────
-  for (const m of layers.measures || []) {
+  for (const m of layer.measures || []) {
     const color = toRgb(MEASURE_RGB);
     page.drawLine({
       start: { x: m.a.x, y: m.a.y },
@@ -157,13 +174,6 @@ export async function buildAnnotatedPdf({ bytes, layers, name = 'plan' }) {
       { color: MEASURE_RGB, pageRotation },
     );
   }
-
-  doc.setTitle(`${name} — annoté (${formatScale(scale)})`);
-  doc.setProducer('Plan Viewer');
-  doc.setModificationDate(new Date());
-
-  const output = await doc.save({ useObjectStreams: false });
-  return new Blob([output], { type: 'application/pdf' });
 }
 
 /** Nom de fichier proposé à l'export. */

@@ -37,5 +37,12 @@ export async function makeTestPlan() {
 
   page.drawText('PLAN DE TEST — 1/50', { x: 100, y: 530, size: 14, font, color: black });
 
+  // Seconde page : sert à vérifier que les annotations et l'échelle sont bien
+  // propres à chaque page (cas du carnet de détails multi-échelles).
+  const detail = doc.addPage([842, 595]);
+  detail.drawLine({ start: { x: 200, y: 200 }, end: { x: 500, y: 200 }, thickness: 3, color: black });
+  detail.drawLine({ start: { x: 200, y: 200 }, end: { x: 200, y: 400 }, thickness: 3, color: black });
+  detail.drawText('DÉTAIL — autre échelle', { x: 200, y: 450, size: 14, font, color: black });
+
   return doc.save();
 }

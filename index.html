@@ -73,6 +73,11 @@
       <main class="stage" id="stage">
         <canvas id="viewport-canvas"></canvas>
 
+        <div class="busy" id="busy" hidden>
+          <div class="spinner"></div>
+          <span id="busy-text">Chargement…</span>
+        </div>
+
         <div class="empty-state" id="empty-state">
           <h1>Plans d'architecture</h1>
           <p>Importez un PDF depuis Google&nbsp;Drive ou depuis vos fichiers pour commencer.</p>
@@ -130,40 +135,49 @@
     <!-- ── Boîtes de dialogue ───────────────────────────────────────────── -->
     <dialog class="dlg" id="dlg-scale">
       <form method="dialog">
-        <h2>Échelle du plan</h2>
-        <p class="hint">
-          L'échelle sert à convertir les distances du PDF en dimensions réelles.
+        <h2>Échelle <span class="subtle" id="scale-page-label"></span></h2>
+
+        <p class="warn">
+          ⚠️ Ne présumez pas de l'échelle nominale. Les exports Archicad testés
+          n'étaient <strong>pas</strong> à une échelle ronde (l'un mesurait 1/62),
+          et un carnet de détails mélange plusieurs échelles selon la page.
+          Calibrez sur une cote imprimée : c'est la seule méthode fiable.
         </p>
 
         <fieldset class="radio-group">
-          <label><input type="radio" name="scale-mode" value="ratio" checked /> Échelle connue</label>
-          <div class="row indent" id="scale-ratio-row">
-            <span>1 /</span>
-            <input type="number" id="scale-ratio" min="1" step="1" value="50" inputmode="numeric" />
-            <div class="presets">
-              <button class="chip" type="button" data-ratio="20">1/20</button>
-              <button class="chip" type="button" data-ratio="50">1/50</button>
-              <button class="chip" type="button" data-ratio="100">1/100</button>
-              <button class="chip" type="button" data-ratio="200">1/200</button>
-            </div>
-          </div>
-
-          <label><input type="radio" name="scale-mode" value="calibration" /> Calibrer sur une cote connue</label>
+          <label
+            ><input type="radio" name="scale-mode" value="calibration" checked /> Calibrer sur une cote
+            imprimée <span class="badge">recommandé</span></label
+          >
           <div class="indent" id="scale-calib-row">
             <p class="hint">
-              Tracez un segment sur une cote dont vous connaissez la longueur réelle,
-              puis saisissez cette longueur. Utile si le PDF a été redimensionné à l'impression.
+              Tracez un segment le long d'une cote imprimée sur le plan (l'accrochage
+              vise les extrémités), puis saisissez la valeur imprimée.
             </p>
-            <button class="btn" type="button" id="scale-calib-start">Tracer le segment de référence</button>
+            <button class="btn wide" type="button" id="scale-calib-start">
+              📏 Tracer le segment de référence
+            </button>
             <div class="row">
-              <input type="number" id="scale-calib-value" min="0" step="0.1" placeholder="Longueur réelle" inputmode="decimal" />
+              <input type="number" id="scale-calib-value" min="0" step="0.1" placeholder="Valeur imprimée" inputmode="decimal" />
               <select id="scale-calib-unit">
-                <option value="cm">cm</option>
-                <option value="m" selected>m</option>
+                <option value="cm" selected>cm</option>
+                <option value="m">m</option>
                 <option value="mm">mm</option>
               </select>
             </div>
             <p class="hint" id="scale-calib-info"></p>
+          </div>
+
+          <label><input type="radio" name="scale-mode" value="ratio" /> Saisir une échelle connue</label>
+          <div class="row indent" id="scale-ratio-row">
+            <span>1 /</span>
+            <input type="number" id="scale-ratio" min="1" step="1" value="50" inputmode="numeric" />
+            <div class="presets">
+              <button class="chip" type="button" data-ratio="10">1/10</button>
+              <button class="chip" type="button" data-ratio="20">1/20</button>
+              <button class="chip" type="button" data-ratio="50">1/50</button>
+              <button class="chip" type="button" data-ratio="100">1/100</button>
+            </div>
           </div>
         </fieldset>
 

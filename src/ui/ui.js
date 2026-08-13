@@ -15,6 +15,9 @@ export function toast(message, { error = false, duration = 3200 } = {}) {
 
 /** Ouvre un `<dialog>` et résout avec la valeur du bouton pressé. */
 export function openDialog(dialog) {
+  // `showModal()` lève une exception sur un dialogue déjà ouvert : on referme
+  // d'abord, sinon un enchaînement inattendu casse toute l'interface.
+  if (dialog.open) dialog.close();
   return new Promise((resolve) => {
     const onClose = () => {
       dialog.removeEventListener('close', onClose);

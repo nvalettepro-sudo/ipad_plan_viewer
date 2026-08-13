@@ -11,6 +11,7 @@ import {
   deletePlan,
   listPlans,
   loadPlan,
+  pageLayer,
   saveLayers,
 } from './core/store.js';
 import { calibrationScale, effectiveRatio, formatScale, mmPerPt, toMm } from './core/units.js';
@@ -35,6 +36,18 @@ const state = {
 };
 
 const drive = new DriveClient();
+
+/**
+ * Voile d'attente. L'extraction des tracés d'une planche A3 chargée prend ~1 s
+ * sur ordinateur et davantage sur iPad : sans retour visuel, l'app paraît figée.
+ */
+function setBusy(text) {
+  $('busy').hidden = !text;
+  if (text) $('busy-text').textContent = text;
+}
+
+/** Calque de la page affichée : échelle et annotations sont propres à la page. */
+const currentLayer = () => (state.layers ? pageLayer(state.layers, state.layers.pageIndex ?? 0) : null);
 
 /** @type {PlanView} */
 let view;
@@ -140,6 +153,7 @@ async function openPlan(id) {
   }
   await autosave.flush();
   const previous = state.destroyPdf;
+  setBusy('Ouverture du plan…');
 
   state.plan = record.plan;
   state.layers = record.layers;
@@ -162,6 +176,7 @@ async function openPlan(id) {
   syncScaleUi();
   updateStatus();
   refreshInspector();
+  setBusy(null);
 }
 
 /** Enregistre un PDF importé puis l'ouvre. */
@@ -171,6 +186,7 @@ async function importPdf(name, bytes, source) {
     return;
   }
   try {
+    setBusy('Lecture du PDF…');
     // Validation avant écriture : inutile de stocker un fichier illisible.
     const probe = await loadPdfDocument(bytes);
     const pageCount = probe.pdf.numPages;
@@ -182,6 +198,7 @@ async function importPdf(name, bytes, source) {
     openScaleDialog({ firstTime: true });
   } catch (err) {
     console.error(err);
+    setBusy(null);
     toast(`PDF illisible : ${err.message}`, { error: true });
   }
 }
@@ -311,7 +328,7 @@ function refreshInspector() {
 }
 
 function syncScaleUi() {
-  $('scale-label').textContent = state.layers ? formatScale(state.layers.scale) : 'Échelle';
+  $('scale-label').textContent = state.layers ? formatScale(currentLayer().scale) : 'Échelle';
 }
 
 async function refreshRecentList() {
@@ -371,6 +388,12 @@ function currentDialogScale() {
 }
 
 function updateScalePreview() {
+  // Toujours en premier : c'est le retour qui confirme que le segment de
+  // référence a bien été capté, avant même que la valeur soit saisie.
+  $('scale-calib-info').textContent = calibrationLengthPt
+    ? `✅ Segment de référence capté (${calibrationLengthPt.toFixed(1)} pt sur le papier). Saisissez sa valeur imprimée.`
+    : 'Aucun segment de référence tracé pour le moment.';
+
   const scale = currentDialogScale();
   const info = $('scale-preview');
   if (!scale || !view?.vp?.base) {
@@ -382,9 +405,6 @@ function updateScalePreview() {
   const hMm = view.vp.base.height * perPt;
   info.textContent = `Échelle 1/${Math.round(effectiveRatio(scale))} — la page représente ${(wMm / 1000).toFixed(2)} × ${(hMm / 1000).toFixed(2)} m.`;
 
-  $('scale-calib-info').textContent = calibrationLengthPt
-    ? `Segment de référence mesuré : ${calibrationLengthPt.toFixed(1)} pt.`
-    : 'Aucun segment de référence tracé pour le moment.';
 }
 
 async function openScaleDialog({ firstTime = false, calibration = false } = {}) {
@@ -392,11 +412,13 @@ async function openScaleDialog({ firstTime = false, calibration = false } = {}) 
     toast('Ouvrez d’abord un plan.');
     return;
   }
-  const scale = state.layers.scale;
-  const mode = calibration ? 'calibration' : scale.mode;
+  const scale = currentLayer().scale;
+  const mode = calibration || firstTime ? 'calibration' : scale.mode;
   document.querySelector(`input[name="scale-mode"][value="${mode}"]`).checked = true;
   $('scale-ratio').value = String(Math.round(effectiveRatio(scale)));
   $('unit-display').value = state.layers.unit || 'auto';
+  $('scale-page-label').textContent =
+    state.plan.pageCount > 1 ? `— page ${(state.layers.pageIndex ?? 0) + 1}/${state.plan.pageCount}` : '';
   updateScalePreview();
 
   const result = await openDialog($('dlg-scale'));
@@ -404,25 +426,35 @@ async function openScaleDialog({ firstTime = false, calibration = false } = {}) 
   if (result === 'calibrate') {
     view.setTool('calibrate');
     syncToolButtons();
-    toast('Tracez un segment sur une cote connue du plan.', { duration: 4500 });
+    toast('Tracez un segment le long d’une cote imprimée du plan.', { duration: 4500 });
     return;
   }
   if (result !== 'ok') {
-    if (firstTime) toast(`Échelle conservée : ${formatScale(state.layers.scale)}`);
+    if (firstTime) toast(`Échelle conservée : ${formatScale(currentLayer().scale)}`);
     return;
   }
 
   const next = currentDialogScale();
   if (!next) {
-    toast('Échelle invalide.', { error: true });
+    const mode = document.querySelector('input[name="scale-mode"]:checked')?.value;
+    toast(
+      mode === 'calibration' && !calibrationLengthPt
+        ? 'Tracez d’abord le segment de référence, puis saisissez sa valeur imprimée.'
+        : 'Échelle invalide.',
+      { error: true },
+    );
     return;
   }
-  state.layers.scale = next;
+  currentLayer().scale = next;
   state.layers.unit = $('unit-display').value;
+  calibrationLengthPt = null;
   view.refresh();
   syncScaleUi();
   refreshInspector();
   autosave.schedule();
+  if (next.mode === 'calibration') {
+    toast(`Échelle calibrée : ${formatScale(next)}`);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -596,11 +628,14 @@ async function openPageDialog() {
   const index = Number(select.value);
   if (index === state.layers.pageIndex) return;
   await autosave.flush();
-  state.layers.view = null;
   state.vectorSegments = null;
-  await view.setPage(index, { restoreView: false });
+  setBusy(`Ouverture de la page ${index + 1}…`);
+  await view.setPage(index, { restoreView: true });
   await saveLayers(state.layers);
+  setBusy(null);
+  syncScaleUi();
   updateStatus();
+  refreshInspector();
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -666,7 +701,10 @@ async function exportPdf() {
     toast('Ouvrez d’abord un plan.');
     return;
   }
-  const count = state.layers.measures.length + state.layers.furniture.length;
+  const count = Object.values(state.layers.pages).reduce(
+    (n, page) => n + page.measures.length + page.furniture.length,
+    0,
+  );
   toast('Génération du PDF annoté…');
   try {
     await autosave.flush();

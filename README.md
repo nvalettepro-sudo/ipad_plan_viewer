@@ -11,6 +11,7 @@ entre les sessions.
 | --- | --- |
 | Navigation : pincer / pan 2 doigts / double-tap / ajustement écran / mini-carte | ✅ |
 | Mesures contraintes H ou V, avec accrochage sur les tracés du PDF | ✅ |
+| Échelle **par page** + calibration sur une cote imprimée | ✅ |
 | Mesure manuelle + grille magnétique (repli pour les PDF scannés) | ✅ |
 | Mobilier : rectangles cotés en dimensions réelles, rotation 90°, couleur, étiquette | ✅ |
 | Sauvegarde locale automatique (IndexedDB + stockage persistant) | ✅ |
@@ -245,13 +246,67 @@ intersections entre la ligne de cote et les tracés du plan — on obtient donc 
 distance exacte de mur à mur. Si le PDF est un scan, l'app le détecte à l'import,
 signale l'absence de tracés et active la grille magnétique.
 
-**Échelle** : par défaut, la conversion suppose que le PDF a été tracé à taille
-réelle (1 pt = 1/72 pouce). Si le plan a été redimensionné à l'export ou à
-l'impression, utilisez **Échelle → Calibrer sur une cote connue**.
+**Échelle** : elle est enregistrée **par page**, parce qu'un carnet de détails
+change d'échelle d'une planche à l'autre.
 
-> À vérifier avant de se fier à l'accrochage : les PDF doivent être des exports
-> natifs d'un logiciel de CAO, pas des scans. La barre d'état affiche le nombre
-> de tracés détectés (« sans tracés vectoriels » = scan).
+---
+
+## Ce que disent les PDF Archicad réels (mesuré, pas supposé)
+
+Deux exports Archicad ont été passés dans le pipeline de l'app.
+
+| | Plan de masse A4 | Carnet de détails A3 |
+| --- | --- | --- |
+| Format | 842 × 595 pt (A4 paysage) | 1191 × 842 pt (A3 paysage), 3 pages |
+| Images bitmap | **0** | **0** |
+| Tracés vectoriels extraits | 2 047 | 56 577 (page 1) |
+| Échelle imprimée sur la planche | aucune | aucune |
+| Échelle réelle mesurée | **≈ 1/62** | **≈ 1/10** (majorité des cotes) |
+| Import + 1er rendu | < 0,5 s | ~1,0 s |
+| Extraction + index d'accrochage | < 0,2 s | ~1,0 s |
+
+### 1. L'accrochage est utilisable — c'est validé
+
+Aucun des deux fichiers ne contient d'image : ce sont des exports vectoriels
+natifs. L'accrochage sur les tracés fonctionne, y compris sur la planche à
+56 000 segments.
+
+### 2. En revanche, l'échelle nominale n'est pas fiable
+
+Aucune des deux planches n'imprime son échelle, et **le plan A4 n'est pas à une
+échelle ronde** : il mesure 1/62. Une mesure faite en supposant 1/50 aurait été
+fausse de −19 % — soit 80 cm d'erreur sur une pièce de 4 m, sans le moindre
+signe d'alerte.
+
+Après calibration sur la cote imprimée « 400 », l'app déduit 1/62 et **toutes
+les cotes vérifiables retombent exactement juste** :
+
+| Cote imprimée | Mesurée par l'app | Écart |
+| --- | --- | --- |
+| 400 cm | 400,0 cm | 0,0 % |
+| 350 cm | 350,0 cm | 0,0 % |
+| 130 cm | 130,0 cm | 0,0 % |
+| 100 cm | 100,0 cm | 0,0 % |
+
+**Règle d'usage : calibrez systématiquement sur une cote imprimée, puis
+vérifiez sur une seconde cote du même dessin.** Le dialogue d'échelle propose
+la calibration en premier pour cette raison.
+
+### 3. Limite connue : plusieurs échelles sur une même planche
+
+Sur le carnet de détails, la majorité des cotes de la page 1 donnent ≈ 1/10,
+mais quelques-unes ne collent pas à ce ratio : une planche de détails peut
+mélanger plusieurs échelles côte à côte. L'app gère **une échelle par page**,
+pas par zone.
+
+Concrètement, sur ce type de planche : calibrez sur une cote **du détail que
+vous êtes en train de mesurer**, et recalibrez en changeant de détail. Une
+échelle par zone serait la réponse propre — à envisager en v2 si l'usage le
+justifie.
+
+> La barre d'état affiche le nombre de tracés détectés. « sans tracés
+> vectoriels » signifie que le PDF est un scan : l'accrochage est alors
+> impossible et la grille magnétique prend le relais.
 
 ---
 

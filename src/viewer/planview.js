@@ -9,6 +9,7 @@
  */
 
 import { clamp, dist, pointInRect, rectCorners, uid } from '../core/geometry.js';
+import { pageLayer } from '../core/store.js';
 import { formatLength, mmPerPt } from '../core/units.js';
 import { extractSegments, SnapIndex } from '../pdf/vector.js';
 import { GestureController } from './gestures.js';
@@ -114,7 +115,7 @@ export class PlanView {
     this.renderer.setPage(this.page, base);
     this.resize({ silent: true });
 
-    if (!(restoreView && this.vp.restore(this.layers.view))) this.vp.fit();
+    if (!(restoreView && this.vp.restore(this.layer.view))) this.vp.fit();
     this.vp.clampPan();
 
     this.thumbnail = null;
@@ -163,8 +164,13 @@ export class PlanView {
     return !!this.snapIndex && !this.snapIndex.isEmpty;
   }
 
+  /** Calque de la page affichée (échelle et annotations propres à cette page). */
+  get layer() {
+    return this.layers ? pageLayer(this.layers, this.layers.pageIndex ?? 0) : null;
+  }
+
   get scale() {
-    return this.layers?.scale;
+    return this.layer?.scale;
   }
 
   get unit() {
@@ -225,7 +231,7 @@ export class PlanView {
       cy: center.y,
       rot: 0,
     };
-    this.layers.furniture.push(item);
+    this.layer.furniture.push(item);
     this.select({ type: 'furniture', id: item.id });
     this.setTool('select');
     this.#changed();
@@ -250,22 +256,22 @@ export class PlanView {
   deleteSelected() {
     if (!this.selection || !this.layers) return;
     const key = this.selection.type === 'furniture' ? 'furniture' : 'measures';
-    this.layers[key] = this.layers[key].filter((o) => o.id !== this.selection.id);
+    this.layer[key] = this.layer[key].filter((o) => o.id !== this.selection.id);
     this.select(null);
     this.#changed();
   }
 
   clearAnnotations() {
     if (!this.layers) return;
-    this.layers.measures = [];
-    this.layers.furniture = [];
+    this.layer.measures = [];
+    this.layer.furniture = [];
     this.select(null);
     this.#changed();
   }
 
   getSelected() {
     if (!this.selection || !this.layers) return null;
-    const list = this.selection.type === 'furniture' ? this.layers.furniture : this.layers.measures;
+    const list = this.selection.type === 'furniture' ? this.layer.furniture : this.layer.measures;
     return list.find((o) => o.id === this.selection.id) || null;
   }
 
@@ -465,7 +471,7 @@ export class PlanView {
       b: draft.b,
       axis: draft.axis || 'h',
     };
-    this.layers.measures.push(measure);
+    this.layer.measures.push(measure);
     this.#changed();
   }
 
@@ -527,12 +533,12 @@ export class PlanView {
         best = { x: p.x, y: p.y, kind: 'endpoint' };
       }
     };
-    for (const m of this.layers?.measures || []) {
+    for (const m of this.layer?.measures || []) {
       if (this.selection?.id === m.id) continue;
       consider(m.a);
       consider(m.b);
     }
-    for (const f of this.layers?.furniture || []) {
+    for (const f of this.layer?.furniture || []) {
       const perMm = 1 / mmPerPt(this.scale);
       for (const c of rectCorners(f.cx, f.cy, f.lengthMm * perMm, f.widthMm * perMm, f.rot)) consider(c);
     }
@@ -576,7 +582,7 @@ export class PlanView {
       }
     }
 
-    const measures = this.layers?.measures || [];
+    const measures = this.layer?.measures || [];
     for (let i = measures.length - 1; i >= 0; i--) {
       const m = measures[i];
       for (const end of ['a', 'b']) {
@@ -586,7 +592,7 @@ export class PlanView {
       if (near <= tol) return { type: 'measure', id: m.id, part: 'body', object: m };
     }
 
-    const furniture = this.layers?.furniture || [];
+    const furniture = this.layer?.furniture || [];
     const perMm = 1 / mmPerPt(this.scale);
     for (let i = furniture.length - 1; i >= 0; i--) {
       const f = furniture[i];
@@ -660,10 +666,10 @@ export class PlanView {
     if (this.gridEnabled) drawGrid(ctx, this.vp, this.#gridStepPt());
 
     const opts = { scale: this.scale, unit: this.unit };
-    for (const f of this.layers?.furniture || []) {
+    for (const f of this.layer?.furniture || []) {
       drawFurniture(ctx, this.vp, f, { ...opts, selected: this.selection?.id === f.id });
     }
-    for (const m of this.layers?.measures || []) {
+    for (const m of this.layer?.measures || []) {
       drawMeasure(ctx, this.vp, m, { ...opts, selected: this.selection?.id === m.id });
     }
 
@@ -759,7 +765,7 @@ export class PlanView {
 
   #persistView() {
     if (!this.layers) return;
-    this.layers.view = this.vp.toJSON();
+    this.layer.view = this.vp.toJSON();
     this.opts.onChange?.({ viewOnly: true });
   }
 
