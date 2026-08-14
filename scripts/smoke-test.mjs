@@ -217,6 +217,59 @@ try {
   check('Service worker enregistré', Boolean(swVersion), swVersion || 'aucun');
 
   check('Aucune erreur console', errors.length === 0, errors.slice(0, 3).join(' | '));
+
+  // ── Sans IndexedDB : navigation privée Safari, « Bloquer tous les cookies » ──
+  // L'app doit rester utilisable en session temporaire, pas refuser les PDF.
+  const privateContext = await browser.newContext({ viewport: { width: 1180, height: 820 } });
+  await privateContext.addInitScript(() => {
+    // Reproduit le comportement de WebKit : la variable n'existe pas du tout.
+    delete window.indexedDB;
+    Object.defineProperty(window, 'indexedDB', {
+      get() {
+        throw new ReferenceError("Can't find variable: indexedDB");
+      },
+      configurable: true,
+    });
+  });
+  const privatePage = await privateContext.newPage();
+  const privateErrors = [];
+  privatePage.on('pageerror', (err) => privateErrors.push(err.message));
+  await privatePage.goto(URL, { waitUntil: 'networkidle' });
+  await privatePage.waitForFunction(() => Boolean(window.planViewer?.view), null, { timeout: 15_000 });
+
+  check(
+    'Sans IndexedDB : avertissement affiché',
+    (await privatePage.textContent('#status-save')).includes('Session temporaire'),
+    await privatePage.textContent('#status-save'),
+  );
+
+  await privatePage.evaluate(async (b64) => {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    window.planViewer.importPdf('sans-stockage.pdf', bytes.buffer, { type: 'file' });
+  }, pdfBytes);
+  await privatePage.waitForFunction(() => document.getElementById('dlg-page').open, null, { timeout: 20_000 });
+  await privatePage.locator('#page-grid .page-card').nth(0).click();
+  await privatePage.waitForFunction(() => Boolean(window.planViewer.state.plan), null, { timeout: 20_000 });
+  await privatePage.evaluate(() => document.getElementById('dlg-scale').close('cancel'));
+  check('Sans IndexedDB : le PDF s’ouvre quand même', true);
+
+  await privatePage.waitForFunction(() => window.planViewer.view.snapIndex !== null, null, { timeout: 20_000 });
+  await privatePage.evaluate(() =>
+    window.planViewer.view.addFurniture({ label: 'Test', lengthMm: 1000, widthMm: 500, color: '#22c55e' }),
+  );
+  const privateExport = await privatePage.evaluate(async () => {
+    const blob = await window.planViewer.buildExport();
+    return (await blob.arrayBuffer()).byteLength;
+  });
+  check('Sans IndexedDB : mesure et export fonctionnent', privateExport > 1000, `${privateExport} octets`);
+  check(
+    'Sans IndexedDB : aucune erreur fatale',
+    privateErrors.length === 0,
+    privateErrors.slice(0, 2).join(' | '),
+  );
+  await privateContext.close();
 } finally {
   await browser?.close();
   server.kill('SIGTERM');

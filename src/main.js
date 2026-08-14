@@ -4,7 +4,7 @@
 
 import './styles.css';
 
-import { getSetting, requestPersistence, setSetting, storageEstimate } from './core/idb.js';
+import { getSetting, initStorage, requestPersistence, setSetting, storageEstimate } from './core/idb.js';
 import {
   createAutosave,
   createPlan,
@@ -56,6 +56,7 @@ let autosave;
 let swControl = { applyUpdate() {}, checkNow() {} };
 let calibrationLengthPt = null;
 let lastExport = null;
+let storageAvailable = true;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Démarrage
@@ -111,7 +112,7 @@ async function boot() {
   autosave = createAutosave(() => state.layers, { onState: setSaveState });
 
   wireUi();
-  await setupPersistence();
+  await setupStorage();
 
   // Préchargement Google : indispensable pour que le tap « Drive » puisse
   // ouvrir la popup sans attente (contrainte iPad n°2).
@@ -121,7 +122,23 @@ async function boot() {
   await refreshRecentList();
 }
 
-async function setupPersistence() {
+async function setupStorage() {
+  // Safari supprime purement et simplement IndexedDB en navigation privée et
+  // quand « Bloquer tous les cookies » est actif. L'app fonctionne quand même,
+  // en session temporaire — mais il faut le dire clairement.
+  const storage = await initStorage();
+  storageAvailable = storage.available;
+
+  if (!storageAvailable) {
+    toast(
+      'Stockage local indisponible : vous êtes probablement en navigation privée, ou « Bloquer tous les cookies » est activé dans Réglages → Safari. ' +
+        'Vous pouvez consulter, mesurer et exporter, mais rien ne sera conservé à la fermeture.',
+      { error: true, duration: 12_000 },
+    );
+    setSaveState('unavailable');
+    return;
+  }
+
   const { supported, persisted } = await requestPersistence();
   if (!supported) return;
   if (!persisted && !isStandalone()) {
@@ -318,6 +335,14 @@ function syncToolButtons() {
 
 function setSaveState(status) {
   const el = $('status-save');
+  if (status === 'unavailable') {
+    el.className = 'save-state warn-state';
+    el.textContent = 'Session temporaire';
+    return;
+  }
+  // Le rappel « session temporaire » ne doit jamais être écrasé par un
+  // « Enregistré » mensonger.
+  if (!storageAvailable) return;
   el.className = `save-state ${status === 'saved' ? 'saved' : status === 'saving' ? 'saving' : ''}`;
   el.textContent =
     status === 'saving' ? 'Enregistrement…' : status === 'saved' ? 'Enregistré' : status === 'error' ? 'Erreur' : '';

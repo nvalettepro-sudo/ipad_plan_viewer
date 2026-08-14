@@ -409,6 +409,12 @@ textarea {
   color: var(--ok);
 }
 
+/* Rappel permanent quand rien ne peut être enregistré (navigation privée). */
+.save-state.warn-state {
+  color: #f5b445;
+  font-weight: 600;
+}
+
 /* ── Bandeau de mise à jour ─────────────────────────────────────────────── */
 
 .update-banner {
