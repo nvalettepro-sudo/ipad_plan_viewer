@@ -1,4 +1,5 @@
 # Plans d'architecture — viewer PDF pour iPad
+https://nvalettepro-sudo.github.io/ipad_plan_viewer/
 
 PWA mono-utilisateur pour **visualiser, mesurer et annoter des plans d'architecture
 PDF** sur iPad, à échelle connue (1/50, 1/100, …), avec import depuis Google Drive
