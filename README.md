@@ -238,6 +238,7 @@ Dans la [console Google Cloud](https://console.cloud.google.com/) :
 | **Naviguer** + glisser | Déplacer le plan — y compris en partant d'un objet |
 | **Naviguer** + appui simple | Sélectionner l'objet sous le doigt ; le vide désélectionne |
 | Glisser l'objet **déjà sélectionné** | Le déplacer (seul cas où un objet bouge) |
+| Pastille **✏️** de la barre du bas | Déplier / replier le panneau d'édition de l'objet |
 | **Mesurer** + 1 doigt | Tracer une cote ; l'axe (H ou V) est choisi selon le sens du geste |
 | **Meuble** | Créer un rectangle aux dimensions réelles saisies |
 | **Échelle** | Choisir 1/N, ou calibrer sur une cote connue du plan |
@@ -250,6 +251,12 @@ doigt. C'est ce qui évite de décaler une cote sans s'en apercevoir en voulant
 simplement se déplacer dans le plan. L'objet sélectionné ouvre un panneau
 d'édition : dimensions réelles, rotation 90°, couleur, nom, duplication,
 suppression ; pour une cote, sa longueur exacte.
+
+Sur téléphone, ce panneau **s'ouvre replié** : il occuperait la moitié de
+l'écran, précisément au moment où l'on veut voir le plan qu'on vient de
+désigner. Une pastille ✏️ apparaît alors dans la barre du bas, à la place des
+informations du document, et le déplie à la demande. La replier ne
+désélectionne pas : l'objet reste manipulable au doigt.
 
 **Accrochage** : actif si le PDF contient des tracés vectoriels (export direct
 depuis Archicad, AutoCAD…). Pendant une cote contrainte, l'accrochage cherche les

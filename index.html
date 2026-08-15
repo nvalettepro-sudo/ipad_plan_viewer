@@ -118,6 +118,15 @@
           <span class="doc-name">Aucun plan</span>
           <span class="doc-meta"></span>
         </span>
+
+        <!-- Apparaît dès qu'un objet est sélectionné et déplie son volet
+             d'édition. Sur téléphone il remplace les infos du document :
+             la barre n'a pas la largeur pour les deux. -->
+        <button class="status-chip" id="btn-inspector" type="button" hidden aria-expanded="false">
+          <span aria-hidden="true">✏️</span>
+          <span id="inspector-chip-label">Meuble</span>
+          <span class="caret" aria-hidden="true">▾</span>
+        </button>
         <label class="chk" title="Accrochage sur les tracés du PDF">
           <input type="checkbox" id="chk-snap" checked /> Accrochage
         </label>

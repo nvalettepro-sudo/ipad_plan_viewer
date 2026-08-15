@@ -394,6 +394,9 @@ textarea {
   color: var(--text-dim);
   font-size: 12px;
   white-space: nowrap;
+  /* Dernier rempart : sur un téléphone étroit, pastille + deux bascules +
+     avertissement peuvent dépasser la largeur. Rien ne doit sortir de l'écran. */
+  overflow: hidden;
   z-index: 20;
 }
 
@@ -420,6 +423,47 @@ textarea {
   text-overflow: ellipsis;
 }
 
+/* Pastille d'édition de la barre d'état. */
+.status-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  max-width: 45%;
+  padding: 0 10px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: rgba(77, 163, 255, 0.16);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.status-chip #inspector-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-chip .caret {
+  color: var(--text-dim);
+  transition: transform 0.15s ease;
+}
+
+.status-chip[aria-expanded='true'] .caret {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-chip .caret {
+    transition: none;
+  }
+}
+
 .chk {
   display: inline-flex;
   flex: none;
@@ -438,9 +482,12 @@ textarea {
 /* Vide en fonctionnement normal : aucune largeur à réserver. Seuls les états
    anormaux s'affichent, et ils sont durables — rien ne clignote. */
 .save-state {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   text-align: right;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .save-state.error-state {

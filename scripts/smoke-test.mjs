@@ -192,7 +192,7 @@ try {
   from = at(now);
   await page.mouse.click(from.x, from.y);
   check(
-    'Appui simple : objet sélectionné, inspecteur ouvert',
+    'Appui simple : objet sélectionné, volet ouvert sur grand écran',
     (await page.evaluate(() => window.planViewer.view.selection?.type)) === 'furniture' &&
       !(await page.locator('#inspector').isHidden()),
   );
@@ -375,6 +375,9 @@ try {
   await phonePage.waitForFunction(() => document.getElementById('dlg-page').open, null, { timeout: 20_000 });
   await phonePage.locator('#page-grid .page-card').nth(0).click();
   await phonePage.waitForFunction(() => Boolean(window.planViewer.state.plan), null, { timeout: 20_000 });
+  // Le dialogue d'échelle s'ouvre juste après l'import : attendre qu'il soit là
+  // avant de le fermer, sinon il reste ouvert et bloque tous les clics.
+  await phonePage.waitForFunction(() => document.getElementById('dlg-scale').open, null, { timeout: 15_000 });
   await phonePage.evaluate(() => document.getElementById('dlg-scale').close('cancel'));
   await phonePage.waitForFunction(() => window.planViewer.view.snapIndex !== null, null, { timeout: 20_000 });
 
@@ -403,6 +406,48 @@ try {
     heights.length === 1,
     heights.join(' · '),
   );
+
+  // ── iPhone : le volet d'édition s'ouvre replié ────────────────────────
+  // La barre est remise dans son état normal : le test précédent y avait
+  // laissé un avertissement artificiel.
+  await phonePage.evaluate(() => {
+    document.getElementById('status-save').textContent = '';
+  });
+  const phoneItem = await phonePage.evaluate(() => {
+    const v = window.planViewer.view;
+    v.select(null);
+    const item = v.addFurniture({ label: 'Lit', lengthMm: 1400, widthMm: 1900, color: '#4da3ff' });
+    v.select(null);
+    return v.vp.toScreen(item.cx, item.cy);
+  });
+  const phoneBox = await phonePage.locator('#viewport-canvas').boundingBox();
+  await phonePage.mouse.click(phoneBox.x + phoneItem.x, phoneBox.y + phoneItem.y);
+  check(
+    'iPhone : sélection repliée, pastille affichée',
+    (await phonePage.evaluate(() => window.planViewer.view.selection?.type)) === 'furniture' &&
+      (await phonePage.locator('#inspector').isHidden()) &&
+      !(await phonePage.locator('#btn-inspector').isHidden()),
+  );
+  check(
+    'iPhone : la pastille nomme l’objet',
+    (await phonePage.textContent('#inspector-chip-label')) === 'Lit',
+    await phonePage.textContent('#inspector-chip-label'),
+  );
+
+  await phonePage.click('#btn-inspector');
+  check(
+    'iPhone : la pastille déplie le volet',
+    !(await phonePage.locator('#inspector').isHidden()) &&
+      (await phonePage.getAttribute('#btn-inspector', 'aria-expanded')) === 'true',
+  );
+
+  await phonePage.click('#inspector-close');
+  check(
+    'iPhone : replier ne désélectionne pas',
+    (await phonePage.locator('#inspector').isHidden()) &&
+      (await phonePage.evaluate(() => window.planViewer.view.selection?.type)) === 'furniture',
+  );
+  await phonePage.evaluate(() => window.planViewer.view.select(null));
 
   // Le canvas ne doit jamais rester noir après un redimensionnement.
   const repaint = await phonePage.evaluate(() => {

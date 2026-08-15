@@ -65,6 +65,9 @@ let swControl = { applyUpdate() {}, checkNow() {} };
 let calibrationLengthPt = null;
 let lastExport = null;
 let storageAvailable = true;
+// Sur téléphone le volet d'édition mange l'écran : il s'ouvre replié, et la
+// pastille de la barre d'état le déplie à la demande.
+let inspectorOpen = false;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Démarrage
@@ -86,7 +89,12 @@ async function boot() {
       autosave.schedule();
       if (!viewOnly) refreshInspector();
     },
-    onSelect: () => refreshInspector(),
+    onSelect: (selection) => {
+      // Chaque nouvelle sélection replie le volet sur téléphone : on veut voir
+      // le plan qu'on vient de désigner, pas un formulaire par-dessus.
+      inspectorOpen = Boolean(selection) && !compactStatus.matches;
+      refreshInspector();
+    },
     onHud: (text) => {
       const hud = $('hud');
       hud.hidden = !text;
@@ -310,7 +318,16 @@ function wireUi() {
   $('chk-snap').addEventListener('change', (e) => view.setSnapEnabled(e.target.checked));
   $('chk-grid').addEventListener('change', (e) => view.setGridEnabled(e.target.checked));
 
-  $('inspector-close').addEventListener('click', () => view.select(null));
+  // Replier, sans désélectionner : l'objet reste manipulable au doigt et la
+  // pastille permet de rouvrir le volet.
+  $('inspector-close').addEventListener('click', () => {
+    inspectorOpen = false;
+    refreshInspector();
+  });
+  $('btn-inspector').addEventListener('click', () => {
+    inspectorOpen = !inspectorOpen;
+    refreshInspector();
+  });
 
   // Mise à jour PWA
   $('update-reload').addEventListener('click', () => {
@@ -329,7 +346,10 @@ function wireUi() {
   window.addEventListener('pagehide', () => autosave.flush());
 
   // Rotation de l'iPad, Slide Over : le seuil peut être franchi en cours de route.
-  compactStatus.addEventListener('change', updateStatus);
+  compactStatus.addEventListener('change', () => {
+    updateStatus();
+    refreshInspector();
+  });
 
   wireScaleDialog();
   wireFurnitureDialog();
@@ -357,14 +377,14 @@ function setSaveState(status) {
 
   if (status === 'unavailable') {
     el.className = 'save-state warn-state';
-    el.textContent = 'Session temporaire';
+    el.textContent = compactStatus.matches ? 'Temporaire' : 'Session temporaire';
     return;
   }
   if (!storageAvailable) return; // le rappel permanent ne doit pas être écrasé
 
   if (status === 'error') {
     el.className = 'save-state error-state';
-    el.textContent = 'Échec de sauvegarde';
+    el.textContent = compactStatus.matches ? 'Échec' : 'Échec de sauvegarde';
     return;
   }
   el.className = 'save-state';
@@ -402,11 +422,42 @@ function updateStatus() {
   $('chk-snap').disabled = state.vectorSegments === 0;
 }
 
+/**
+ * Reflète la sélection courante : pastille dans la barre d'état, et volet
+ * d'édition seulement s'il est déplié.
+ */
 function refreshInspector() {
+  const chip = $('btn-inspector');
+  const panel = $('inspector');
+  const object = view?.getSelected();
+  const selection = object ? view.selection : null;
+
+  chip.hidden = !selection;
+  // Sur écran étroit la pastille prend la place des infos du document : la
+  // barre n'a pas la largeur pour les deux.
+  $('status-doc').hidden = Boolean(selection) && compactStatus.matches;
+
+  if (!selection) {
+    panel.hidden = true;
+    return;
+  }
+
+  $('inspector-chip-label').textContent =
+    selection.type === 'furniture' ? object.label || 'Meuble' : 'Cote';
+  chip.setAttribute('aria-expanded', String(inspectorOpen));
+
+  if (!inspectorOpen) {
+    panel.hidden = true;
+    return;
+  }
   renderInspector(
     view,
-    { root: $('inspector'), title: $('inspector-title'), body: $('inspector-body') },
-    () => autosave.schedule(),
+    { root: panel, title: $('inspector-title'), body: $('inspector-body') },
+    () => {
+      autosave.schedule();
+      // Renommer un meuble doit se voir aussitôt sur la pastille.
+      $('inspector-chip-label').textContent = view.getSelected()?.label || 'Meuble';
+    },
   );
 }
 
