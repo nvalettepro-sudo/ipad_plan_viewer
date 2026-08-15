@@ -693,45 +693,114 @@ export class PlanView {
   }
 
   /**
-   * Colle les arêtes d'un meuble aux tracés du plan : c'est ce qui permet de
-   * plaquer un meuble contre un mur au pixel près.
+   * Colle les arêtes d'un meuble à ce qui l'entoure : les tracés du plan, les
+   * autres meubles, et à défaut la grille. C'est ce qui permet de plaquer un
+   * meuble contre un mur, ou deux meubles bord à bord, au point près.
    *
    * Une seule correction par axe est retenue — la plus faible — pour ne pas
-   * tirailler le rectangle entre deux murs opposés.
+   * tirailler le rectangle entre deux murs opposés. La grille n'intervient que
+   * sur les axes où rien n'a été trouvé : sinon elle défairait aussitôt
+   * l'accrochage au mur, qui a toujours raison contre un repère abstrait.
    */
-  #snapFurnitureToPlan(item) {
+  #snapFurniture(item) {
     this.activeSnapGuides = [];
-    if (!this.snapEnabled || !this.snapIndex || this.snapIndex.isEmpty) return;
-
-    const radius = this.vp.lengthToPdf(FURNITURE_SNAP_PX);
     const box = this.#furnitureBox(item);
+    const grid = this.gridEnabled ? this.gridOrigin() : null;
 
-    const bestShift = (axis, edges, from, to) => {
-      let shift = null;
-      let guide = null;
-      for (const edge of edges) {
-        const hit = this.snapIndex.nearestParallel(axis, edge, from, to, radius);
-        if (hit === null) continue;
-        const delta = hit - edge;
-        if (shift === null || Math.abs(delta) < Math.abs(shift)) {
-          shift = delta;
-          guide = { axis, value: hit, from, to };
-        }
+    // Les deux axes sont calculés sur la MÊME boîte, avant toute correction :
+    // appliquer l'un puis recalculer l'autre rendrait le résultat dépendant de
+    // l'ordre, donc imprévisible au doigt.
+    const horizontal = this.#bestFurnitureShift(item, 'v', box);
+    const vertical = this.#bestFurnitureShift(item, 'h', box);
+
+    const apply = (found, axis, edges, origin, from, to) => {
+      if (found) {
+        this.activeSnapGuides.push(found.guide);
+        return found.shift;
       }
-      return { shift, guide };
+      if (origin === undefined) return 0;
+      // Guide vert sur la ligne de grille retenue : sans lui, rien ne
+      // distingue « posé sur le quadrillage » de « lâché à peu près là ».
+      const { shift, value } = this.#gridShift(edges, origin);
+      this.activeSnapGuides.push({ axis, value, from, to });
+      return shift;
     };
 
-    const horizontal = bestShift('v', [box.x0, box.x1], box.y0, box.y1);
-    const vertical = bestShift('h', [box.y0, box.y1], box.x0, box.x1);
+    item.cx += apply(horizontal, 'v', [box.x0, box.x1], grid?.x, box.y0, box.y1);
+    item.cy += apply(vertical, 'h', [box.y0, box.y1], grid?.y, box.x0, box.x1);
+  }
 
-    if (horizontal.shift !== null) {
-      item.cx += horizontal.shift;
-      this.activeSnapGuides.push(horizontal.guide);
+  /**
+   * Meilleure correction du meuble sur un axe : on essaie ses deux arêtes,
+   * contre les tracés du plan puis contre les autres meubles, et on garde le
+   * plus petit déplacement.
+   *
+   * `axis` vaut `'v'` pour les arêtes verticales (correction en x) et `'h'`
+   * pour les horizontales (correction en y).
+   */
+  #bestFurnitureShift(item, axis, box) {
+    if (!this.snapEnabled) return null;
+
+    const radius = this.vp.lengthToPdf(FURNITURE_SNAP_PX);
+    const vertical = axis === 'v';
+    const edges = vertical ? [box.x0, box.x1] : [box.y0, box.y1];
+    const from = vertical ? box.y0 : box.x0;
+    const to = vertical ? box.y1 : box.x1;
+
+    let best = null;
+    const consider = (edge, value, guideFrom, guideTo) => {
+      const shift = value - edge;
+      if (Math.abs(shift) > radius) return;
+      if (best && Math.abs(shift) >= Math.abs(best.shift)) return;
+      best = { shift, guide: { axis, value, from: guideFrom, to: guideTo } };
+    };
+
+    for (const edge of edges) {
+      if (this.snapIndex && !this.snapIndex.isEmpty) {
+        const hit = this.snapIndex.nearestParallel(axis, edge, from, to, radius);
+        if (hit !== null) consider(edge, hit, from, to);
+      }
+
+      // Les autres meubles, eux, accrochent même sans se faire face : aligner
+      // une rangée de meubles sur un même nu d'un bout à l'autre de la pièce
+      // est justement ce qu'on cherche à faire. Un tracé du plan, au
+      // contraire, est un mur : on s'y adosse, on ne s'aligne pas sur son
+      // prolongement — d'où la portée limitée imposée à `nearestParallel`.
+      for (const other of this.layer?.furniture || []) {
+        if (other.id === item.id) continue;
+        const b = this.#furnitureBox(other);
+        const lo = vertical ? b.y0 : b.x0;
+        const hi = vertical ? b.y1 : b.x1;
+        // Les deux arêtes du voisin : la proche pour se poser bord à bord, la
+        // lointaine pour aligner les deux meubles sur un même nu.
+        for (const value of vertical ? [b.x0, b.x1] : [b.y0, b.y1]) {
+          consider(edge, value, Math.min(from, lo), Math.max(to, hi));
+        }
+      }
     }
-    if (vertical.shift !== null) {
-      item.cy += vertical.shift;
-      this.activeSnapGuides.push(vertical.guide);
+    return best;
+  }
+
+  /**
+   * Correction amenant l'arête la plus proche sur une ligne de grille, et
+   * position de cette ligne.
+   *
+   * On aligne les ARÊTES, pas le centre : un meuble de 90 cm centré sur un
+   * nœud a ses deux bords à 45 cm des lignes, et l'accrochage semble alors
+   * sans rapport avec le quadrillage affiché.
+   */
+  #gridShift(edges, origin) {
+    const step = this.#gridStepPt();
+    let best = { shift: 0, value: edges[0] };
+    let bestAbs = Infinity;
+    for (const edge of edges) {
+      const value = origin + Math.round((edge - origin) / step) * step;
+      if (Math.abs(value - edge) < bestAbs) {
+        bestAbs = Math.abs(value - edge);
+        best = { shift: value - edge, value };
+      }
     }
+    return best;
   }
 
   get #snapRadiusPt() {
@@ -942,12 +1011,10 @@ export class PlanView {
       hit.object.cx = state.free.cx;
       hit.object.cy = state.free.cy;
 
-      const snapped = this.#snapGrid({ x: hit.object.cx, y: hit.object.cy });
-      if (snapped) {
-        hit.object.cx = snapped.x;
-        hit.object.cy = snapped.y;
-      }
-      this.#snapFurnitureToPlan(hit.object);
+      // Murs, meubles voisins et grille sont traités ensemble : les faire
+      // jouer l'un après l'autre revenait à ce que le dernier écrase le
+      // précédent, et la grille paraissait sans effet.
+      this.#snapFurniture(hit.object);
       return;
     }
 

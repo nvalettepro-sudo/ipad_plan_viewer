@@ -459,6 +459,93 @@ try {
     `arête gauche à x = ${placed.left.toFixed(2)} (mur à 100)`,
   );
 
+  // ── Meuble accroché à un autre meuble ─────────────────────────────────
+  // Deux meubles doivent pouvoir se poser bord à bord, exactement, sans
+  // laisser le filet de blanc qu'un placement à l'œil laisse toujours.
+  const pairTarget = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const perMm = 1 / (25.4 / 72) / v.layer.scale.ratio;
+    const first = v.layer.furniture[0];
+    const rightEdge = first.cx + (first.lengthMm * perMm) / 2;
+    // Second meuble posé à droite du premier, en le manquant de 5 pt : c'est
+    // à l'accrochage de finir le travail.
+    const second = v.addFurniture({ label: 'Table', lengthMm: 1200, widthMm: 600, color: '#22c55e' });
+    Object.assign(second, { cx: 600, cy: first.cy, rot: 0 });
+    v.select({ type: 'furniture', id: second.id });
+    v.refresh();
+    return {
+      grab: v.vp.toScreen(second.cx, second.cy),
+      drop: v.vp.toScreen(rightEdge + (second.lengthMm * perMm) / 2 + 5, first.cy),
+      rightEdge,
+    };
+  });
+  const grabPair = at(pairTarget.grab);
+  const dropPair = at(pairTarget.drop);
+  await page.mouse.move(grabPair.x, grabPair.y);
+  await page.mouse.down();
+  await page.mouse.move((grabPair.x + dropPair.x) / 2, grabPair.y, { steps: 8 });
+  await page.mouse.move(dropPair.x, dropPair.y, { steps: 8 });
+  await page.mouse.up();
+  const pair = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const perMm = 1 / (25.4 / 72) / v.layer.scale.ratio;
+    const [a, b] = v.layer.furniture;
+    return {
+      aRight: a.cx + (a.lengthMm * perMm) / 2,
+      bLeft: b.cx - (b.lengthMm * perMm) / 2,
+    };
+  });
+  check(
+    'Meuble posé bord à bord contre un autre meuble',
+    Math.abs(pair.bLeft - pair.aRight) < 0.01,
+    `arête gauche à ${pair.bLeft.toFixed(2)}, arête droite du voisin à ${pair.aRight.toFixed(2)}`,
+  );
+
+  // Alignement sur le nu : l'arête lointaine du voisin accroche aussi, ce qui
+  // permet d'aligner deux meubles sur une même ligne.
+  const alignTarget = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const perMm = 1 / (25.4 / 72) / v.layer.scale.ratio;
+    const [a, b] = v.layer.furniture;
+    const aTop = a.cy + (a.widthMm * perMm) / 2;
+    // On écarte le second meuble puis on le ramène près du nu supérieur du
+    // premier, sans le toucher : seul l'alignement doit jouer.
+    Object.assign(b, { cx: 600, cy: 200 });
+    v.select({ type: 'furniture', id: b.id });
+    v.refresh();
+    return {
+      grab: v.vp.toScreen(b.cx, b.cy),
+      drop: v.vp.toScreen(b.cx, aTop - (b.widthMm * perMm) / 2 + 4),
+      aTop,
+    };
+  });
+  const grabAlign = at(alignTarget.grab);
+  const dropAlign = at(alignTarget.drop);
+  await page.mouse.move(grabAlign.x, grabAlign.y);
+  await page.mouse.down();
+  await page.mouse.move(grabAlign.x, (grabAlign.y + dropAlign.y) / 2, { steps: 8 });
+  await page.mouse.move(dropAlign.x, dropAlign.y, { steps: 8 });
+  await page.mouse.up();
+  const aligned = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const perMm = 1 / (25.4 / 72) / v.layer.scale.ratio;
+    const [a, b] = v.layer.furniture;
+    return { aTop: a.cy + (a.widthMm * perMm) / 2, bTop: b.cy + (b.widthMm * perMm) / 2 };
+  });
+  check(
+    'Deux meubles alignés sur un même nu',
+    Math.abs(aligned.bTop - aligned.aTop) < 0.01,
+    `nu à ${aligned.bTop.toFixed(2)} contre ${aligned.aTop.toFixed(2)}`,
+  );
+
+  // On retire le second meuble : la suite compte sur un seul.
+  await page.evaluate(() => {
+    const v = window.planViewer.view;
+    v.select(null);
+    v.layer.furniture.length = 1;
+    v.refresh();
+  });
+
   // ── Cote accrochée sur un meuble ──────────────────────────────────────
   const furnitureEdge = await page.evaluate(() => {
     const v = window.planViewer.view;
@@ -556,6 +643,59 @@ try {
     Math.abs(snapped.snapped.x - (100 + snapped.step)) < 0.01 &&
       Math.abs(snapped.snapped.y - (100 + snapped.step)) < 0.01,
   );
+
+  // ── Un meuble suit la grille déplacée ─────────────────────────────────
+  // L'accrochage portait sur le CENTRE du meuble : un meuble de 90 cm centré
+  // sur un nœud a ses bords à 45 cm des lignes, et l'accrochage semblait sans
+  // rapport avec le quadrillage. Ce sont les arêtes qui doivent s'aligner —
+  // et sur l'origine courante, pas sur celle du coin de la page.
+  await page.click('#chk-snap'); // murs écartés : on isole la grille
+  const gridDrag = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const f = v.layer.furniture[0];
+    Object.assign(f, { rot: 0, lengthMm: 2000, widthMm: 900, cx: 300, cy: 420 });
+    v.select({ type: 'furniture', id: f.id });
+    v.refresh();
+    return v.vp.toScreen(f.cx, f.cy);
+  });
+  const gDragFrom = at(gridDrag);
+  await page.mouse.move(gDragFrom.x, gDragFrom.y);
+  await page.mouse.down();
+  await page.mouse.move(gDragFrom.x + 25, gDragFrom.y - 17, { steps: 10 });
+  await page.mouse.move(gDragFrom.x + 47, gDragFrom.y - 31, { steps: 10 });
+  await page.mouse.up();
+  const onGrid = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const f = v.layer.furniture[0];
+    const perMm = 1 / (25.4 / 72) / v.layer.scale.ratio;
+    const step = 1000 * perMm;
+    const half = { x: (f.lengthMm * perMm) / 2, y: (f.widthMm * perMm) / 2 };
+    const edges = {
+      x: [f.cx - half.x, f.cx + half.x],
+      y: [f.cy - half.y, f.cy + half.y],
+    };
+    const on = (value, origin) =>
+      Math.abs(value - (origin + Math.round((value - origin) / step) * step)) < 0.01;
+    return {
+      edges,
+      movedX: edges.x.some((e) => on(e, 100)),
+      movedY: edges.y.some((e) => on(e, 100)),
+      defaultX: edges.x.some((e) => on(e, 0)),
+      defaultY: edges.y.some((e) => on(e, 0)),
+    };
+  });
+  check(
+    'Grille : les arêtes du meuble se posent sur le quadrillage',
+    onGrid.movedX && onGrid.movedY,
+    `x = ${onGrid.edges.x.map((e) => e.toFixed(2)).join(' / ')}, y = ${onGrid.edges.y
+      .map((e) => e.toFixed(2))
+      .join(' / ')}`,
+  );
+  check(
+    'Grille : le meuble suit l’origine déplacée, pas celle du coin de page',
+    !onGrid.defaultX && !onGrid.defaultY,
+  );
+  await page.click('#chk-snap');
 
   await page.click('#chk-grid');
   check('Grille masquée : pastille retirée', await page.locator('#btn-grid-step').isHidden());

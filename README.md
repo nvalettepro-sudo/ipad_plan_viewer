@@ -282,11 +282,30 @@ lisible dans le bandeau, et l'objet sélectionné affiche tout dans son panneau
 d'édition. L'export PDF, lui, est fait à l'échelle native de la planche : il
 porte toutes les étiquettes.
 
-**Un meuble se plaque contre un mur.** En le faisant glisser, ses arêtes sont
-attirées par les tracés du plan qui leur font face — et par ceux-là seulement,
-pas par un mur situé dans leur prolongement. Une seule correction par axe est
-retenue, la plus faible, pour ne pas tirailler le rectangle entre deux murs
-opposés. Les arêtes effectivement collées s'affichent en vert pendant le geste.
+**Un meuble se plaque contre un mur, contre un autre meuble, ou sur la
+grille.** En le faisant glisser, ses arêtes sont attirées par :
+
+1. les **tracés du plan** qui leur font face — et par ceux-là seulement, pas
+   par un mur situé dans leur prolongement : un mur, on s'y adosse ;
+2. les **arêtes des autres meubles**, où qu'ils soient sur la planche. La
+   proche pour se poser bord à bord sans le filet de blanc qu'un placement à
+   l'œil laisse toujours, la lointaine pour aligner une rangée de meubles sur
+   un même nu ;
+3. à défaut, la **grille**, quand elle est affichée.
+
+Une seule correction par axe est retenue, la plus faible, pour ne pas
+tirailler le rectangle entre deux murs opposés. Les trois sources sont
+évaluées ensemble et non l'une après l'autre : appliquées en cascade, la
+dernière effaçait le travail des précédentes — c'est ce qui donnait
+l'impression que la grille était sans effet sur les meubles. Un mur ou un
+meuble à portée l'emporte donc sur la grille, jamais l'inverse. Les
+alignements effectivement obtenus s'affichent en vert pendant le geste.
+
+**L'accrochage à la grille porte sur les arêtes, pas sur le centre.** Un
+meuble de 90 cm centré sur un nœud a ses deux bords à 45 cm des lignes : le
+rectangle ne touchait alors aucun trait du quadrillage, et l'accrochage
+paraissait sans rapport avec la grille affichée — d'autant plus qu'en
+déplaçant l'origine, ce décalage restait identique.
 
 **Une cote va toujours d'un trait à l'autre.** L'axe du geste fixe la ligne de
 cote ; ses deux extrémités se posent ensuite sur les tracés que cette ligne
