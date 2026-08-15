@@ -161,7 +161,42 @@ try {
     check('Cote contrainte à l’horizontale', Math.abs(measures[0].a.y - measures[0].b.y) < 1e-6);
   }
 
+  // Une cote posée rend la main à la navigation : sans ça, le glissement
+  // suivant traçait une seconde cote au lieu de déplacer le plan.
+  check(
+    'Cote posée : retour automatique à Naviguer',
+    (await page.evaluate(() => window.planViewer.view.tool)) === 'pan' &&
+      (await page.getAttribute('#tool-pan', 'aria-pressed')) === 'true' &&
+      (await page.getAttribute('#tool-measure', 'aria-pressed')) === 'false',
+    await page.evaluate(() => window.planViewer.view.tool),
+  );
+
   // ── Mobilier ──────────────────────────────────────────────────────────
+  // Passage par le dialogue, comme au doigt : un meuble créé doit lui aussi
+  // rendre la main à la navigation, boutons de la barre remis d'accord.
+  await page.click('#tool-measure');
+  await page.click('#btn-add-furniture');
+  await page.waitForFunction(() => document.getElementById('dlg-furniture').open, null, { timeout: 5_000 });
+  await page.fill('#furniture-name', 'Bureau');
+  await page.click('#dlg-furniture button[value="ok"]');
+  // On attend le meuble lui-même : l'évènement `close` du dialogue précède la
+  // reprise du gestionnaire, le tester tout de suite serait une course.
+  await page.waitForFunction(() => window.planViewer.view.layer.furniture.length === 1, null, {
+    timeout: 5_000,
+  });
+  check(
+    'Meuble créé : retour automatique à Naviguer',
+    (await page.evaluate(() => window.planViewer.view.tool)) === 'pan' &&
+      (await page.getAttribute('#tool-pan', 'aria-pressed')) === 'true' &&
+      (await page.getAttribute('#tool-measure', 'aria-pressed')) === 'false',
+    `tool=${await page.evaluate(() => window.planViewer.view.tool)}`,
+  );
+  await page.evaluate(() => {
+    const v = window.planViewer.view;
+    v.select(null);
+    v.layer.furniture.length = 0; // la suite compte sur un seul meuble, créé juste après
+  });
+
   await page.evaluate(() =>
     window.planViewer.view.addFurniture({ label: 'Canapé', lengthMm: 2000, widthMm: 900, color: '#4da3ff' }),
   );

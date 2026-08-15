@@ -168,6 +168,10 @@ export class PlanView {
     this.activeSnap = null;
     if (tool !== 'pan') this.select(null);
     this.opts.onHud?.(tool === 'calibrate' ? 'Tracez le segment de référence' : null);
+    // L'outil change aussi de l'intérieur — après une cote posée, après un
+    // meuble créé : c'est la vue qui prévient la barre d'outils, sinon les
+    // boutons resteraient allumés sur un outil qui n'est plus actif.
+    this.opts.onToolChange?.(tool);
     this.#draw();
   }
 
@@ -671,6 +675,13 @@ export class PlanView {
     };
     this.layer.measures.push(measure);
     this.#changed();
+
+    // Retour à la navigation : une cote se pose, puis on regarde le plan. Sans
+    // ça, le glissement suivant traçait une seconde cote au lieu de déplacer
+    // la vue — et l'outil Mesurer empêche la sélection, donc la retouche.
+    // La cote n'est pas sélectionnée pour autant : un volet d'édition surgissant
+    // après chaque cote gênerait plus qu'il n'aiderait.
+    this.setTool('pan');
   }
 
   // ── Accrochage ──────────────────────────────────────────────────────────

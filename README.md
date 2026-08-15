@@ -246,14 +246,22 @@ encore sa calibration d'échelle.
 | **Naviguer** + appui simple | Sélectionner l'objet sous le doigt ; le vide désélectionne |
 | Glisser l'objet **déjà sélectionné** | Le déplacer (seul cas où un objet bouge) |
 | Pastille **✏️** de la barre du bas | Déplier / replier le panneau d'édition de l'objet |
-| **Mesurer** + 1 doigt | Tracer une cote ; l'axe (H ou V) est choisi selon le sens du geste |
+| **Mesurer** + 1 doigt | Tracer une cote ; l'axe (H ou V) est choisi selon le sens du geste. La cote posée, l'app revient à **Naviguer** |
 | ☰ → **Annuler** ↩︎ | Défaire la dernière action, quelle qu'elle soit (⌘Z au clavier) |
 | Bascule **Cotes** | Masquer les dimensions du mobilier, en gardant les noms |
 | Bascule **Grille** + pastille **1 m / 50 cm** | Afficher le quadrillage et changer son pas |
 | Glisser le **point bleu** | Déplacer l'origine de la grille (s'accroche aux angles) |
-| **Meuble** | Créer un rectangle aux dimensions réelles saisies |
+| **Meuble** | Créer un rectangle aux dimensions réelles saisies ; retour à **Naviguer** une fois créé |
 | ☰ → **Échelle** | Choisir 1/N, ou calibrer sur une cote connue du plan |
 | ☰ → **Export** | Générer le PDF annoté, puis *Partager* (feuille iOS) ou *Télécharger* |
+
+**Les outils de dessin ne restent pas armés.** Une cote posée, un meuble créé,
+l'app revient d'elle-même à **Naviguer**. C'est le geste suivant qui commande :
+après avoir coté, on veut regarder le plan ou retoucher ce qu'on vient de
+poser — pas tracer une seconde cote. Et comme l'outil *Mesurer* interdit la
+sélection, y rester rendait impossible la reprise d'une extrémité. Pour
+enchaîner plusieurs cotes, on retape sur 📏 : un tap, contre le risque de
+semer des cotes en croyant se déplacer.
 
 **Sélection et déplacement** : un glissement navigue *toujours* dans le plan,
 même en partant d'un meuble ou d'une cote. Pour déplacer un objet, il faut

@@ -109,10 +109,10 @@ async function boot() {
       badge.hidden = !state.plan;
       badge.textContent = `${percent} %`;
     },
+    onToolChange: () => syncToolButtons(),
     onCalibrate: (lengthPt) => {
       calibrationLengthPt = lengthPt;
       view.setTool('pan');
-      syncToolButtons();
       openScaleDialog({ calibration: true });
     },
     onUndoChange: (depth) => {
@@ -318,10 +318,7 @@ function wireUi() {
 
   // Outils
   for (const btn of document.querySelectorAll('.tool')) {
-    btn.addEventListener('click', () => {
-      view.setTool(btn.dataset.tool);
-      syncToolButtons();
-    });
+    btn.addEventListener('click', () => view.setTool(btn.dataset.tool));
   }
   $('btn-add-furniture').addEventListener('click', () => openFurnitureDialog());
   $('btn-undo').addEventListener('click', undoLastAction);
@@ -653,7 +650,7 @@ async function openScaleDialog({ firstTime = false, calibration = false } = {}) 
   if (result !== 'ok') {
     if (firstTime) {
       toast(
-        `Échelle non confirmée pour cette page (${formatScale(currentLayer().scale)} supposée) — le bouton Échelle reste marqué « ? ».`,
+        `Échelle non confirmée pour cette page (${formatScale(currentLayer().scale)} supposée) — le menu ☰ reste marqué d'une pastille orange.`,
         { duration: 5000 },
       );
       syncScaleUi();
@@ -732,7 +729,6 @@ async function openFurnitureDialog() {
     widthMm: toMm(width, unit),
     color: furnitureColor,
   });
-  syncToolButtons();
   $('furniture-name').value = '';
 }
 
