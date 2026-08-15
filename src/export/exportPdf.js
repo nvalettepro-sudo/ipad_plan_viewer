@@ -70,7 +70,7 @@ function drawCenteredText(page, font, text, cx, cy, { color, pageRotation }) {
  * @param {{bytes: ArrayBuffer, layers: object, name?: string}} input
  * @returns {Promise<Blob>}
  */
-export async function buildAnnotatedPdf({ bytes, layers, name = 'plan' }) {
+export async function buildAnnotatedPdf({ bytes, layers, name = 'plan', showDimensions = true }) {
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const unit = layers.unit || 'auto';
@@ -81,7 +81,7 @@ export async function buildAnnotatedPdf({ bytes, layers, name = 'plan' }) {
     const index = Number(key);
     if (!Number.isInteger(index) || index >= doc.getPageCount()) continue;
     if (!layer.measures?.length && !layer.furniture?.length) continue;
-    drawLayerOnPage(doc.getPage(index), layer, { font, unit });
+    drawLayerOnPage(doc.getPage(index), layer, { font, unit, showDimensions });
   }
 
   doc.setTitle(`${name} — annoté`);
@@ -93,7 +93,7 @@ export async function buildAnnotatedPdf({ bytes, layers, name = 'plan' }) {
 }
 
 /** Dessine les annotations d'un calque sur sa page. */
-function drawLayerOnPage(page, layer, { font, unit }) {
+function drawLayerOnPage(page, layer, { font, unit, showDimensions = true }) {
   const pageRotation = page.getRotation().angle % 360;
   const scale = layer.scale;
   const perMm = 1 / mmPerPt(scale);
@@ -119,7 +119,7 @@ function drawLayerOnPage(page, layer, { font, unit }) {
     });
 
     const dims = `${formatLength(item.lengthMm, unit)} x ${formatLength(item.widthMm, unit)}`;
-    if (item.label) {
+    if (item.label && showDimensions) {
       const up = rotateVec(0, TEXT_SIZE * 0.75, pageRotation);
       drawCenteredText(page, font, item.label, item.cx + up.x, item.cy + up.y, {
         color: [0.1, 0.1, 0.1],
@@ -130,7 +130,12 @@ function drawLayerOnPage(page, layer, { font, unit }) {
         color: [0.25, 0.25, 0.25],
         pageRotation,
       });
-    } else {
+    } else if (item.label) {
+      drawCenteredText(page, font, item.label, item.cx, item.cy, {
+        color: [0.1, 0.1, 0.1],
+        pageRotation,
+      });
+    } else if (showDimensions) {
       drawCenteredText(page, font, dims, item.cx, item.cy, {
         color: [0.25, 0.25, 0.25],
         pageRotation,

@@ -26,6 +26,9 @@ import { PageRenderer } from './renderer.js';
 import { Viewport } from './viewport.js';
 
 const HIT_TOLERANCE_PX = 16; // zone tactile généreuse : pas de précision au pixel
+// Les poignées d'extrémité de cote priment sur le corps de la cote, et
+// méritent une zone plus large encore : c'est le geste le plus fin de l'app.
+const HANDLE_TOLERANCE_PX = 26;
 const SNAP_RADIUS_PX = 22;
 const MIN_MEASURE_PX = 12;
 const QUALITY_DEBOUNCE_MS = 220;
@@ -63,6 +66,7 @@ export class PlanView {
     this.tool = 'pan';
     this.snapEnabled = true;
     this.gridEnabled = false;
+    this.showDimensions = true;
     this.selection = null;
     this.draft = null;
     this.activeSnap = null;
@@ -156,6 +160,12 @@ export class PlanView {
 
   setGridEnabled(value) {
     this.gridEnabled = value;
+    this.#draw();
+  }
+
+  /** Affiche ou masque les cotes portées par les meubles (le nom reste). */
+  setShowDimensions(value) {
+    this.showDimensions = value;
     this.#draw();
   }
 
@@ -590,12 +600,15 @@ export class PlanView {
 
   #hitTest(screenPoint, pdfPoint) {
     const tol = this.vp.lengthToPdf(HIT_TOLERANCE_PX);
+    const handleTol = this.vp.lengthToPdf(HANDLE_TOLERANCE_PX);
 
-    // Priorité aux poignées de la cote déjà sélectionnée.
+    // Priorité absolue aux poignées de la cote déjà sélectionnée : c'est ce
+    // qui permet de saisir une extrémité même quand le corps de la cote, ou
+    // un meuble, passe juste dessous.
     const selected = this.getSelected();
     if (selected && this.selection.type === 'measure') {
       for (const end of ['a', 'b']) {
-        if (dist(pdfPoint, selected[end]) <= tol) {
+        if (dist(pdfPoint, selected[end]) <= handleTol) {
           return { type: 'measure', id: selected.id, part: end, object: selected };
         }
       }
@@ -686,7 +699,11 @@ export class PlanView {
 
     const opts = { scale: this.scale, unit: this.unit };
     for (const f of this.layer?.furniture || []) {
-      drawFurniture(ctx, this.vp, f, { ...opts, selected: this.selection?.id === f.id });
+      drawFurniture(ctx, this.vp, f, {
+        ...opts,
+        selected: this.selection?.id === f.id,
+        showDimensions: this.showDimensions,
+      });
     }
     for (const m of this.layer?.measures || []) {
       drawMeasure(ctx, this.vp, m, { ...opts, selected: this.selection?.id === m.id });

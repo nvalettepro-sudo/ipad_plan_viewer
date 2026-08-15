@@ -84,14 +84,15 @@ export function drawMeasure(ctx, vp, m, { scale, unit, selected = false }) {
   const lengthMm = Math.hypot(m.b.x - m.a.x, m.b.y - m.a.y) * mmPerPt(scale);
   label(ctx, formatLength(lengthMm, unit), (a.x + b.x) / 2, (a.y + b.y) / 2 - 14, { color });
 
+  // Poignées d'extrémité : dimensionnées pour le doigt, pas pour le curseur.
   if (selected) {
     ctx.fillStyle = SELECT_COLOR;
     for (const p of [a, b]) {
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 9, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, 13, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.5;
       ctx.stroke();
     }
   }
@@ -117,8 +118,12 @@ export function drawDraftMeasure(ctx, vp, draft, { scale, unit }) {
   ctx.restore();
 }
 
-/** Meuble : rectangle orienté, nom et dimensions réelles. */
-export function drawFurniture(ctx, vp, item, { scale, unit, selected = false }) {
+/**
+ * Meuble : rectangle orienté, nom et dimensions réelles.
+ * `showDimensions` à faux ne laisse que le nom — un plan chargé en mobilier
+ * devient vite illisible si chaque rectangle porte ses cotes.
+ */
+export function drawFurniture(ctx, vp, item, { scale, unit, selected = false, showDimensions = true }) {
   const ptPerMm = 1 / mmPerPt(scale);
   const w = item.lengthMm * ptPerMm;
   const h = item.widthMm * ptPerMm;
@@ -138,10 +143,12 @@ export function drawFurniture(ctx, vp, item, { scale, unit, selected = false }) 
 
   const center = vp.toScreen(item.cx, item.cy);
   const dims = `${formatLength(item.lengthMm, unit)} × ${formatLength(item.widthMm, unit)}`;
-  if (item.label) {
+  if (item.label && showDimensions) {
     label(ctx, item.label, center.x, center.y - 11, { color: '#111' });
     label(ctx, dims, center.x, center.y + 11, { color: '#333', font: SMALL_FONT });
-  } else {
+  } else if (item.label) {
+    label(ctx, item.label, center.x, center.y, { color: '#111' });
+  } else if (showDimensions) {
     label(ctx, dims, center.x, center.y, { color: '#333', font: SMALL_FONT });
   }
 

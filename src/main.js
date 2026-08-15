@@ -68,6 +68,10 @@ let storageAvailable = true;
 // Sur téléphone le volet d'édition mange l'écran : il s'ouvre replié, et la
 // pastille de la barre d'état le déplie à la demande.
 let inspectorOpen = false;
+// Identité de l'objet actuellement rendu dans le volet. Reconstruire le volet
+// à chaque frappe détruisait le champ en cours de saisie : sur iPhone, le
+// clavier se refermait à chaque lettre.
+let inspectorRenderedFor = null;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Démarrage
@@ -129,6 +133,11 @@ async function boot() {
 
   wireUi();
   await setupStorage();
+
+  // Préférence d'affichage : elle doit survivre au redémarrage de l'app.
+  const showDims = await getSetting('showFurnitureDims', true);
+  $('chk-dims').checked = showDims;
+  view.setShowDimensions(showDims);
 
   // Préchargement Google : indispensable pour que le tap « Drive » puisse
   // ouvrir la popup sans attente (contrainte iPad n°2).
@@ -317,6 +326,10 @@ function wireUi() {
 
   $('chk-snap').addEventListener('change', (e) => view.setSnapEnabled(e.target.checked));
   $('chk-grid').addEventListener('change', (e) => view.setGridEnabled(e.target.checked));
+  $('chk-dims').addEventListener('change', (e) => {
+    view.setShowDimensions(e.target.checked);
+    setSetting('showFurnitureDims', e.target.checked);
+  });
 
   // Replier, sans désélectionner : l'objet reste manipulable au doigt et la
   // pastille permet de rouvrir le volet.
@@ -439,6 +452,7 @@ function refreshInspector() {
 
   if (!selection) {
     panel.hidden = true;
+    inspectorRenderedFor = null;
     return;
   }
 
@@ -448,8 +462,16 @@ function refreshInspector() {
 
   if (!inspectorOpen) {
     panel.hidden = true;
+    inspectorRenderedFor = null;
     return;
   }
+
+  // Le volet n'est reconstruit que si l'objet affiché change : sinon on
+  // arracherait le champ que l'utilisateur est en train de remplir.
+  const key = `${selection.type}:${selection.id}`;
+  if (key === inspectorRenderedFor) return;
+  inspectorRenderedFor = key;
+
   renderInspector(
     view,
     { root: panel, title: $('inspector-title'), body: $('inspector-body') },
@@ -946,6 +968,9 @@ async function exportPdf() {
       bytes: state.bytes.slice(0),
       layers: state.layers,
       name: state.plan.name,
+      // Ce qui est masqué à l'écran l'est aussi à l'export : on exporte le
+      // plan tel qu'on vient de le composer.
+      showDimensions: view.showDimensions,
     });
     lastExport = { blob, name: exportFileName(state.plan.name) };
     $('export-info').textContent = `${lastExport.name} — ${formatBytes(blob.size)}, ${count} annotation(s).`;
@@ -975,5 +1000,10 @@ window.planViewer = {
   importPdf,
   flushSave: () => autosave.flush(),
   buildExport: () =>
-    buildAnnotatedPdf({ bytes: state.bytes.slice(0), layers: state.layers, name: state.plan.name }),
+    buildAnnotatedPdf({
+      bytes: state.bytes.slice(0),
+      layers: state.layers,
+      name: state.plan.name,
+      showDimensions: view.showDimensions,
+    }),
 };

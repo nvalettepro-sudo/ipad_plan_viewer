@@ -104,7 +104,10 @@ export function renderInspector(view, dom, onChange) {
       swatch.setAttribute('aria-pressed', String(color === object.color));
       swatch.addEventListener('click', () => {
         view.updateSelected({ color });
-        renderInspector(view, dom, onChange);
+        // Mise à jour sur place plutôt que reconstruction : reconstruire
+        // arracherait le champ « Nom » et refermerait le clavier.
+        for (const other of swatches.children) other.setAttribute('aria-pressed', 'false');
+        swatch.setAttribute('aria-pressed', 'true');
         onChange();
       });
       swatches.append(swatch);

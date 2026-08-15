@@ -231,6 +231,69 @@ try {
     f.lengthMm = 2000;
   });
 
+  // ── Poignée de cote : déplacer une extrémité et l'accrocher ───────────
+  // Le mur droit du plan de test est en x = 700 : l'extrémité tirée à
+  // proximité doit s'y verrouiller exactement.
+  const handle = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const m = v.layer.measures[0];
+    v.select({ type: 'measure', id: m.id });
+    return { screen: v.vp.toScreen(m.b.x, m.b.y), bx: m.b.x, target: v.vp.toScreen(700, m.b.y) };
+  });
+  const grab = at(handle.screen);
+  const drop = at(handle.target);
+  await page.mouse.move(grab.x, grab.y);
+  await page.mouse.down();
+  await page.mouse.move((grab.x + drop.x) / 2, grab.y, { steps: 8 });
+  await page.mouse.move(drop.x - 6, grab.y + 2, { steps: 8 });
+  await page.mouse.up();
+  const moved = await page.evaluate(() => window.planViewer.view.layer.measures[0]);
+  check(
+    'Extrémité de cote déplacée et accrochée au mur',
+    Math.abs(moved.b.x - 700) < 0.01,
+    `x = ${moved.b.x.toFixed(2)} (mur à 700)`,
+  );
+  check('Extrémité déplacée : la cote reste horizontale', Math.abs(moved.a.y - moved.b.y) < 1e-6);
+
+  // ── Masquage des cotes du mobilier ────────────────────────────────────
+  await page.click('#chk-dims');
+  check(
+    'Bouton « Cotes » : dimensions masquées',
+    (await page.evaluate(() => window.planViewer.view.showDimensions)) === false,
+  );
+  const exportSansCotes = await page.evaluate(async () => {
+    const blob = await window.planViewer.buildExport();
+    return (await blob.arrayBuffer()).byteLength;
+  });
+  await page.click('#chk-dims');
+  const exportAvecCotes = await page.evaluate(async () => {
+    const blob = await window.planViewer.buildExport();
+    return (await blob.arrayBuffer()).byteLength;
+  });
+  check(
+    'L’export suit le réglage d’affichage',
+    exportSansCotes < exportAvecCotes,
+    `${exportSansCotes} o sans cotes, ${exportAvecCotes} o avec`,
+  );
+
+  // ── Saisie du nom : le champ ne doit pas être détruit à chaque lettre ──
+  // C'est ce qui refermait le clavier de l'iPhone à chaque caractère.
+  await page.evaluate(() => {
+    const v = window.planViewer.view;
+    v.select({ type: 'furniture', id: v.layer.furniture[0].id });
+  });
+  const nameField = page.locator('#inspector-body input[type="text"]');
+  await nameField.click();
+  await nameField.fill('');
+  await nameField.type('Buffet', { delay: 30 });
+  check(
+    'Saisie du nom : champ intact et toujours focalisé',
+    (await page.evaluate(() => document.activeElement?.type)) === 'text' &&
+      (await nameField.inputValue()) === 'Buffet' &&
+      (await page.evaluate(() => window.planViewer.view.getSelected().label)) === 'Buffet',
+    `champ « ${await nameField.inputValue()} », focus sur ${await page.evaluate(() => document.activeElement?.tagName)}`,
+  );
+
   // ── Persistance IndexedDB ─────────────────────────────────────────────
   await page.evaluate(() => window.planViewer.flushSave());
   await page.reload({ waitUntil: 'networkidle' });
