@@ -27,13 +27,29 @@ export const FURNITURE_COLORS = [
 const FONT = "600 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 const SMALL_FONT = "500 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
+/** Hauteur fixe d'une pastille d'étiquette, en pixels écran. */
+const LABEL_H = 20;
+const LABEL_PAD_X = 6;
+
+/**
+ * Encombrement horizontal d'une étiquette, sans la dessiner.
+ *
+ * Les étiquettes gardent une taille constante à l'écran : en dézoomant, elles
+ * finissent par être plus grandes que l'objet qu'elles décrivent et masquent le
+ * plan. On mesure donc avant de dessiner, pour pouvoir renoncer.
+ */
+function labelWidth(ctx, text, font = FONT) {
+  ctx.font = font;
+  return ctx.measureText(text).width + LABEL_PAD_X * 2;
+}
+
 /** Étiquette lisible sur n'importe quel fond : pastille claire + texte sombre. */
 function label(ctx, text, x, y, { color = '#111', bg = 'rgba(255,255,255,0.94)', font = FONT } = {}) {
   ctx.font = font;
-  const padX = 6;
+  const padX = LABEL_PAD_X;
   const padY = 4;
   const w = ctx.measureText(text).width + padX * 2;
-  const h = 20;
+  const h = LABEL_H;
   const rx = x - w / 2;
   const ry = y - h / 2;
 
@@ -50,6 +66,21 @@ function label(ctx, text, x, y, { color = '#111', bg = 'rgba(255,255,255,0.94)',
   ctx.textBaseline = 'middle';
   ctx.fillText(text, x, y + 0.5);
   return { x: rx, y: ry, w, h, padY };
+}
+
+/**
+ * L'étiquette d'une cote ne s'affiche que si elle tient dans la longueur de
+ * cette cote à l'écran. On projette l'encombrement de la pastille sur la
+ * direction de la cote : pour une cote horizontale c'est sa largeur qui
+ * compte, pour une verticale sa hauteur.
+ */
+function measureLabelFits(ctx, text, a, b, font = FONT) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 1) return false;
+  const need = (Math.abs(dx) * labelWidth(ctx, text, font) + Math.abs(dy) * LABEL_H) / len;
+  return need <= len;
 }
 
 /** Trace une cote : ligne + pattes d'extrémité + valeur réelle. */
@@ -82,7 +113,10 @@ export function drawMeasure(ctx, vp, m, { scale, unit, selected = false }) {
   ctx.stroke();
 
   const lengthMm = Math.hypot(m.b.x - m.a.x, m.b.y - m.a.y) * mmPerPt(scale);
-  label(ctx, formatLength(lengthMm, unit), (a.x + b.x) / 2, (a.y + b.y) / 2 - 14, { color });
+  const text = formatLength(lengthMm, unit);
+  if (measureLabelFits(ctx, text, a, b)) {
+    label(ctx, text, (a.x + b.x) / 2, (a.y + b.y) / 2 - 14, { color });
+  }
 
   // Poignées d'extrémité : dimensionnées pour le doigt, pas pour le curseur.
   if (selected) {
@@ -113,8 +147,13 @@ export function drawDraftMeasure(ctx, vp, draft, { scale, unit }) {
   ctx.stroke();
   ctx.setLineDash([]);
 
+  // Pendant le tracé, la valeur est de toute façon affichée en clair dans le
+  // bandeau : masquer l'étiquette trop grande ne fait rien perdre.
   const lengthMm = Math.hypot(draft.b.x - draft.a.x, draft.b.y - draft.a.y) * mmPerPt(scale);
-  label(ctx, formatLength(lengthMm, unit), (a.x + b.x) / 2, (a.y + b.y) / 2 - 14, { color: MEASURE_COLOR });
+  const text = formatLength(lengthMm, unit);
+  if (measureLabelFits(ctx, text, a, b)) {
+    label(ctx, text, (a.x + b.x) / 2, (a.y + b.y) / 2 - 14, { color: MEASURE_COLOR });
+  }
   ctx.restore();
 }
 
@@ -143,12 +182,27 @@ export function drawFurniture(ctx, vp, item, { scale, unit, selected = false, sh
 
   const center = vp.toScreen(item.cx, item.cy);
   const dims = `${formatLength(item.lengthMm, unit)} × ${formatLength(item.widthMm, unit)}`;
-  if (item.label && showDimensions) {
+
+  // Place disponible à l'intérieur du rectangle, à l'écran. Les rotations
+  // étant des multiples de 90°, la boîte englobante des quatre coins projetés
+  // est exactement le rectangle ; pour un angle quelconque elle majorerait
+  // légèrement la place, ce qui reste sans conséquence visible.
+  const xs = corners.map((c) => c.x);
+  const ys = corners.map((c) => c.y);
+  const availW = Math.max(...xs) - Math.min(...xs) - 8;
+  const availH = Math.max(...ys) - Math.min(...ys) - 6;
+
+  // Deux étiquettes empilées occupent 42 px de haut (±11 px depuis le centre).
+  const nameFits = Boolean(item.label) && labelWidth(ctx, item.label) <= availW && availH >= LABEL_H;
+  const dimsFit = labelWidth(ctx, dims, SMALL_FONT) <= availW && availH >= LABEL_H;
+
+  if (nameFits && showDimensions && dimsFit && availH >= LABEL_H * 2 + 2) {
     label(ctx, item.label, center.x, center.y - 11, { color: '#111' });
     label(ctx, dims, center.x, center.y + 11, { color: '#333', font: SMALL_FONT });
-  } else if (item.label) {
+  } else if (nameFits) {
+    // Le nom prime sur les dimensions : c'est lui qui identifie le meuble.
     label(ctx, item.label, center.x, center.y, { color: '#111' });
-  } else if (showDimensions) {
+  } else if (!item.label && showDimensions && dimsFit) {
     label(ctx, dims, center.x, center.y, { color: '#333', font: SMALL_FONT });
   }
 

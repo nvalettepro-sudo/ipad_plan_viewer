@@ -231,6 +231,13 @@ Dans la [console Google Cloud](https://console.cloud.google.com/) :
 
 ## Utilisation
 
+La barre du haut tient sur **une seule rangée** et ne garde que les trois
+outils de dessin — ✋ *Naviguer*, 📏 *Mesurer*, 🛋️ *Meuble*. Tout le reste
+(ouvrir, Drive, annuler, ajuster, échelle, export, pages, réglages) vit dans le
+**menu ☰**, à gauche. Sur téléphone la barre débordait sinon sur deux rangées,
+au détriment du plan. Une pastille orange sur le ☰ signale qu'une page attend
+encore sa calibration d'échelle.
+
 | Geste / bouton | Effet |
 | --- | --- |
 | 2 doigts | Déplacer et zoomer, quel que soit l'outil actif |
@@ -240,13 +247,13 @@ Dans la [console Google Cloud](https://console.cloud.google.com/) :
 | Glisser l'objet **déjà sélectionné** | Le déplacer (seul cas où un objet bouge) |
 | Pastille **✏️** de la barre du bas | Déplier / replier le panneau d'édition de l'objet |
 | **Mesurer** + 1 doigt | Tracer une cote ; l'axe (H ou V) est choisi selon le sens du geste |
-| **Annuler** ↩︎ | Défaire la dernière action, quelle qu'elle soit (⌘Z au clavier) |
+| ☰ → **Annuler** ↩︎ | Défaire la dernière action, quelle qu'elle soit (⌘Z au clavier) |
 | Bascule **Cotes** | Masquer les dimensions du mobilier, en gardant les noms |
 | Bascule **Grille** + pastille **1 m / 50 cm** | Afficher le quadrillage et changer son pas |
 | Glisser le **point bleu** | Déplacer l'origine de la grille (s'accroche aux angles) |
 | **Meuble** | Créer un rectangle aux dimensions réelles saisies |
-| **Échelle** | Choisir 1/N, ou calibrer sur une cote connue du plan |
-| **Export** | Générer le PDF annoté, puis *Partager* (feuille iOS) ou *Télécharger* |
+| ☰ → **Échelle** | Choisir 1/N, ou calibrer sur une cote connue du plan |
+| ☰ → **Export** | Générer le PDF annoté, puis *Partager* (feuille iOS) ou *Télécharger* |
 
 **Sélection et déplacement** : un glissement navigue *toujours* dans le plan,
 même en partant d'un meuble ou d'une cote. Pour déplacer un objet, il faut
@@ -261,6 +268,19 @@ l'écran, précisément au moment où l'on veut voir le plan qu'on vient de
 désigner. Une pastille ✏️ apparaît alors dans la barre du bas, à la place des
 informations du document, et le déplie à la demande. La replier ne
 désélectionne pas : l'objet reste manipulable au doigt.
+
+**Les étiquettes s'effacent au lieu de grossir.** Nom, dimensions et valeurs de
+cote gardent une taille constante à l'écran : c'est ce qu'on attend d'une
+annotation, mais en dézoomant elles finiraient par être plus grandes que les
+objets qu'elles décrivent et masqueraient le plan. Chaque étiquette est donc
+mesurée avant d'être tracée, et n'est dessinée que si elle **tient dans**
+l'objet : à l'intérieur du rectangle pour un meuble, dans la longueur de la
+ligne pour une cote. Quand la place ne suffit que pour une seule ligne, le
+**nom du meuble prime** sur ses dimensions ; en dessous, plus rien ne
+s'affiche. Rien n'est perdu : la valeur d'une cote en cours de tracé reste
+lisible dans le bandeau, et l'objet sélectionné affiche tout dans son panneau
+d'édition. L'export PDF, lui, est fait à l'échelle native de la planche : il
+porte toutes les étiquettes.
 
 **Un meuble se plaque contre un mur.** En le faisant glisser, ses arêtes sont
 attirées par les tracés du plan qui leur font face — et par ceux-là seulement,
@@ -303,8 +323,9 @@ le nombre d'annotations posées.
 
 **Échelle** : elle est enregistrée **par page**, parce qu'un carnet de détails
 change d'échelle d'une planche à l'autre. Tant qu'une page n'a pas été
-calibrée, le bouton *Échelle* affiche un **« ? »** encadré d'orange : la valeur
-affichée n'est qu'un héritage de la page précédente, pas une mesure fiable.
+calibrée, une **pastille orange** apparaît sur le ☰ et l'entrée *Échelle* du
+menu affiche un **« ? »** : la valeur affichée n'est qu'un héritage de la page
+précédente, pas une mesure fiable.
 
 ---
 

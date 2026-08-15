@@ -31,19 +31,17 @@
     <div id="app">
       <!-- ── Barre d'outils ─────────────────────────────────────────────── -->
       <header class="toolbar" id="toolbar">
-        <div class="toolbar-group">
-          <button class="btn" id="btn-open" type="button">
-            <span class="ico">📂</span><span class="lbl">Ouvrir</span>
-          </button>
-          <button class="btn" id="btn-drive" type="button">
-            <span class="ico">☁️</span><span class="lbl">Drive</span>
-          </button>
-        </div>
+        <!-- Tout ce qui n'est pas un outil de dessin vit dans ce menu : sur un
+             téléphone, la barre tenait sur deux rangées et mangeait l'écran. -->
+        <button class="btn" id="btn-menu" type="button" title="Menu">
+          <span class="ico">☰</span><span class="lbl">Menu</span>
+          <!-- Pastille orange quand l'échelle de la page n'est pas confirmée :
+               l'avertissement était porté par le bouton Échelle, désormais
+               rangé dans le menu. -->
+          <span class="menu-dot" id="menu-alert" hidden aria-hidden="true"></span>
+        </button>
 
         <div class="toolbar-group tools" role="group" aria-label="Outils">
-          <!-- Un seul outil pour naviguer ET sélectionner : appui simple pour
-               sélectionner, glissement pour déplacer le plan, et glissement sur
-               l'objet déjà sélectionné pour le déplacer, lui. -->
           <button class="btn tool" id="tool-pan" data-tool="pan" type="button" aria-pressed="true">
             <span class="ico">✋</span><span class="lbl">Naviguer</span>
           </button>
@@ -53,22 +51,6 @@
           <button class="btn" id="btn-add-furniture" type="button">
             <span class="ico">🛋️</span><span class="lbl">Meuble</span>
           </button>
-        </div>
-
-        <div class="toolbar-group">
-          <button class="btn" id="btn-undo" type="button" title="Annuler la dernière action" disabled>
-            <span class="ico">↩︎</span><span class="lbl">Annuler</span>
-          </button>
-          <button class="btn" id="btn-fit" type="button" title="Ajuster à l'écran">
-            <span class="ico">⤢</span><span class="lbl">Ajuster</span>
-          </button>
-          <button class="btn" id="btn-scale" type="button">
-            <span class="ico">⚖️</span><span class="lbl" id="scale-label">Échelle</span>
-          </button>
-          <button class="btn" id="btn-export" type="button">
-            <span class="ico">⬇️</span><span class="lbl">Export</span>
-          </button>
-          <button class="btn" id="btn-menu" type="button" title="Menu"><span class="ico">⋯</span></button>
         </div>
       </header>
 
@@ -258,13 +240,34 @@
       <form method="dialog">
         <h2>Menu</h2>
         <ul class="menu-list">
-          <li><button class="btn wide" type="button" id="menu-library">Mes plans</button></li>
-          <li><button class="btn wide" type="button" id="menu-page">Changer de page…</button></li>
-          <li><button class="btn wide" type="button" id="menu-clear">Effacer toutes les annotations</button></li>
-          <li><button class="btn wide" type="button" id="menu-google">Configuration Google Drive…</button></li>
-          <li><button class="btn wide" type="button" id="menu-storage">État du stockage</button></li>
-          <li><button class="btn wide" type="button" id="menu-install">Installer sur l'écran d'accueil</button></li>
+          <li><button class="btn wide" type="button" id="btn-open">📂 Ouvrir un fichier</button></li>
+          <li><button class="btn wide" type="button" id="btn-drive">☁️ Importer depuis Drive</button></li>
         </ul>
+
+        <ul class="menu-list menu-group">
+          <li>
+            <button class="btn wide" type="button" id="btn-undo" disabled>
+              ↩︎ Annuler la dernière action
+            </button>
+          </li>
+          <li><button class="btn wide" type="button" id="btn-fit">⤢ Ajuster à l'écran</button></li>
+          <li>
+            <button class="btn wide" type="button" id="btn-scale">
+              ⚖️ Échelle <span class="menu-value" id="scale-label">—</span>
+            </button>
+          </li>
+          <li><button class="btn wide" type="button" id="btn-export">⬇️ Exporter le PDF annoté</button></li>
+        </ul>
+
+        <ul class="menu-list menu-group">
+          <li><button class="btn wide" type="button" id="menu-library">🗂 Mes plans</button></li>
+          <li><button class="btn wide" type="button" id="menu-page">📄 Changer de page…</button></li>
+          <li><button class="btn wide" type="button" id="menu-clear">🧹 Effacer toutes les annotations</button></li>
+          <li><button class="btn wide" type="button" id="menu-google">🔑 Configuration Google Drive…</button></li>
+          <li><button class="btn wide" type="button" id="menu-storage">💾 État du stockage</button></li>
+          <li><button class="btn wide" type="button" id="menu-install">📲 Installer sur l'écran d'accueil</button></li>
+        </ul>
+
         <p class="hint" id="menu-version"></p>
         <menu><button class="btn" value="close">Fermer</button></menu>
       </form>

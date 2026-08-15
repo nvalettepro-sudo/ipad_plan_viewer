@@ -78,12 +78,12 @@ textarea {
 
 /* ── Barre d'outils ─────────────────────────────────────────────────────── */
 
+/* Une seule rangée : le menu à gauche, les outils centrés. */
 .toolbar {
   display: flex;
   gap: 8px;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   padding: calc(var(--safe-top) + 8px) calc(var(--safe-right) + 16px) 8px calc(var(--safe-left) + 16px);
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--line);
@@ -94,6 +94,46 @@ textarea {
   display: flex;
   gap: 6px;
   align-items: center;
+}
+
+.toolbar-group.tools {
+  margin: 0 auto;
+}
+
+/* Le bouton menu est ancré à gauche ; sa pastille signale une échelle non
+   confirmée, avertissement que portait le bouton Échelle avant son rangement. */
+#btn-menu {
+  position: relative;
+  flex: none;
+}
+
+.menu-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--bg-elevated);
+  border-radius: 50%;
+  background: #f5b445;
+}
+
+.menu-group {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.menu-value {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.menu-value.scale-warn {
+  color: #f5b445;
+  border: 0 !important;
+  font-weight: 600;
 }
 
 .btn {

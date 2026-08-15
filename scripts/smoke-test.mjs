@@ -23,6 +23,17 @@ function check(label, condition, detail = '') {
   console.log(`${condition ? '✓' : '✗'} ${label}${detail ? ` — ${detail}` : ''}`);
 }
 
+/**
+ * Les commandes secondaires vivent dans le menu burger : il faut l'ouvrir avant
+ * de cliquer, et attendre sa fermeture avant la vérification suivante.
+ */
+async function menuClick(page, selector) {
+  await page.click('#btn-menu');
+  await page.waitForFunction(() => document.getElementById('dlg-menu').open, null, { timeout: 5_000 });
+  await page.click(selector);
+  await page.waitForFunction(() => !document.getElementById('dlg-menu').open, null, { timeout: 5_000 });
+}
+
 async function waitForServer(timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -286,6 +297,109 @@ try {
     `${exportSansCotes} o sans cotes, ${exportAvecCotes} o avec`,
   );
 
+  // ── Étiquettes qui débordent : elles disparaissent ────────────────────
+  // Les étiquettes gardent une taille fixe à l'écran. En dézoomant elles
+  // finiraient par être plus grandes que ce qu'elles décrivent et masqueraient
+  // le plan : on vérifie qu'elles s'effacent au lieu de grossir en apparence.
+  // On espionne `fillText` : le rendu du PDF est un bitmap recomposé, seules
+  // les annotations écrivent du texte pendant un repaint.
+  await page.evaluate(() => {
+    const proto = CanvasRenderingContext2D.prototype;
+    const original = proto.fillText;
+    window.__paintedText = [];
+    proto.fillText = function (text, ...rest) {
+      window.__paintedText.push(String(text));
+      return original.call(this, text, ...rest);
+    };
+  });
+
+  /** Repeint et renvoie les textes effectivement écrits sur le canevas. */
+  const paintedText = async () => {
+    await page.evaluate(() => {
+      window.__paintedText = [];
+      window.planViewer.view.refresh();
+    });
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    return page.evaluate(() => window.__paintedText);
+  };
+
+  // Une cote courte (20 pt ≈ 35 cm à 1/50) en plus de la longue déjà tracée :
+  // c'est elle qui perd son étiquette la première.
+  await page.evaluate(() => {
+    const v = window.planViewer.view;
+    v.select(null);
+    Object.assign(v.layer.furniture[0], { label: 'Canapé', lengthMm: 2000, widthMm: 900, rot: 0 });
+    v.layer.measures.push({
+      id: 'courte',
+      type: 'measure',
+      a: { x: 200, y: 480 },
+      b: { x: 220, y: 480 },
+      axis: 'h',
+    });
+    v.fit();
+  });
+
+  // Zoom maximal : tout tient, tout s'affiche.
+  await page.evaluate(() => {
+    for (let i = 0; i < 10; i++) window.planViewer.view.zoomBy(1.5);
+  });
+  const zoomedIn = await paintedText();
+  check(
+    'Zoom fort : nom et dimensions du meuble affichés',
+    zoomedIn.includes('Canapé') && zoomedIn.some((t) => t.includes('×')),
+    zoomedIn.join(' | ') || '(aucun texte)',
+  );
+  check(
+    'Zoom fort : la cote courte affiche sa valeur',
+    zoomedIn.some((t) => t === '35 cm'),
+    zoomedIn.join(' | '),
+  );
+
+  // Zoom minimal : ni le rectangle ni la cote courte n'ont la place. La cote
+  // de 10 m, elle, reste bien plus longue que son étiquette : elle la garde.
+  await page.evaluate(() => {
+    window.planViewer.view.fit();
+    for (let i = 0; i < 10; i++) window.planViewer.view.zoomBy(1 / 1.5);
+  });
+  const zoomedOut = await paintedText();
+  check(
+    'Dézoom : le meuble n’affiche plus de texte géant',
+    !zoomedOut.includes('Canapé') && !zoomedOut.some((t) => t.includes('×')),
+    zoomedOut.join(' | ') || '(aucun texte)',
+  );
+  check(
+    'Dézoom : la cote courte perd son étiquette, la longue la garde',
+    !zoomedOut.includes('35 cm') && zoomedOut.some((t) => t.includes('10,58')),
+    zoomedOut.join(' | ') || '(aucun texte)',
+  );
+
+  // Place intermédiaire : le nom prime sur les dimensions. Le rectangle est
+  // réduit à une hauteur qui n'admet qu'une seule ligne d'étiquette.
+  await page.evaluate(() => {
+    const v = window.planViewer.view;
+    v.fit();
+    const f = v.layer.furniture[0];
+    // On vise 32 px de haut à l'écran : de quoi loger une étiquette (20 px),
+    // pas deux. Calculé depuis le zoom courant pour ne pas dépendre du
+    // format de la fenêtre de test.
+    const px = v.vp.lengthToScreen(f.widthMm / ((25.4 / 72) * v.layer.scale.ratio));
+    Object.assign(f, { label: 'Lit', lengthMm: 2000, widthMm: Math.round((f.widthMm * 32) / px) });
+  });
+  const middle = await paintedText();
+  check(
+    'Place réduite : le nom reste, les dimensions tombent',
+    middle.includes('Lit') && !middle.some((t) => t.includes('×')),
+    middle.join(' | ') || '(aucun texte)',
+  );
+
+  // Retour à l'état attendu par la suite des vérifications.
+  await page.evaluate(() => {
+    const v = window.planViewer.view;
+    Object.assign(v.layer.furniture[0], { label: 'Canapé', lengthMm: 2000, widthMm: 900 });
+    v.layer.measures = v.layer.measures.filter((m) => m.id !== 'courte');
+    v.fit();
+  });
+
   // ── Saisie du nom : le champ ne doit pas être détruit à chaque lettre ──
   // C'est ce qui refermait le clavier de l'iPhone à chaque caractère.
   await page.evaluate(() => {
@@ -464,7 +578,7 @@ try {
     'Suppression effectuée',
     (await page.evaluate(() => window.planViewer.view.layer.furniture.length)) === undoStart.furniture - 1,
   );
-  await page.click('#btn-undo');
+  await menuClick(page, '#btn-undo');
   check(
     'Annuler restaure le meuble supprimé',
     (await page.evaluate(() => window.planViewer.view.layer.furniture.length)) === undoStart.furniture &&
@@ -478,7 +592,7 @@ try {
     v.rotateSelected(90);
   });
   const rotated = await page.evaluate(() => window.planViewer.view.layer.furniture[0].rot);
-  await page.click('#btn-undo');
+  await menuClick(page, '#btn-undo');
   check(
     'Annuler défait la rotation',
     rotated === 90 && (await page.evaluate(() => window.planViewer.view.layer.furniture[0].rot)) === 0,
@@ -494,7 +608,7 @@ try {
       v.updateSelected({ label: text }, `label:${id}`);
     }
   });
-  await page.click('#btn-undo');
+  await menuClick(page, '#btn-undo');
   check(
     'Annuler défait toute la saisie d’un nom, pas une lettre',
     (await page.evaluate(() => window.planViewer.view.layer.furniture[0].label)) === beforeTyping,
@@ -508,7 +622,7 @@ try {
     v.select({ type: 'furniture', id: v.layer.furniture[0].id });
     v.rotateSelected(90);
   });
-  await page.click('#btn-undo');
+  await menuClick(page, '#btn-undo');
   check(
     'Annuler ne déplace pas la vue',
     Math.abs((await page.evaluate(() => window.planViewer.view.vp.scale)) - zoomBefore) < 1e-9,
@@ -731,6 +845,41 @@ try {
       (await phonePage.evaluate(() => window.planViewer.view.selection?.type)) === 'furniture',
   );
   await phonePage.evaluate(() => window.planViewer.view.select(null));
+
+  // ── iPhone : barre d'outils sur une seule rangée + menu burger ────────
+  // La barre tenait sur deux rangées et mangeait l'écran : les commandes
+  // secondaires vivent désormais dans le menu.
+  const bar = await phonePage.evaluate(() => {
+    const toolbar = document.getElementById('toolbar');
+    const tops = [...toolbar.querySelectorAll('.btn')].map((b) => Math.round(b.getBoundingClientRect().top));
+    return { rows: new Set(tops).size, height: Math.round(toolbar.getBoundingClientRect().height) };
+  });
+  check(
+    'iPhone : barre d’outils sur une seule rangée',
+    bar.rows === 1,
+    `${bar.rows} rangée(s), ${bar.height} px`,
+  );
+
+  await phonePage.click('#btn-menu');
+  await phonePage.waitForFunction(() => document.getElementById('dlg-menu').open, null, { timeout: 5_000 });
+  const menuEntries = await phonePage.evaluate(() =>
+    ['btn-open', 'btn-drive', 'btn-undo', 'btn-fit', 'btn-scale', 'btn-export', 'menu-page', 'menu-clear']
+      .filter((id) => {
+        const el = document.getElementById(id);
+        return el && el.closest('#dlg-menu') && el.getBoundingClientRect().height > 0;
+      }),
+  );
+  check(
+    'iPhone : les commandes secondaires sont dans le menu',
+    menuEntries.length === 8,
+    menuEntries.join(', '),
+  );
+
+  await phonePage.click('#btn-fit');
+  check(
+    'iPhone : une commande du menu s’exécute et referme le menu',
+    !(await phonePage.evaluate(() => document.getElementById('dlg-menu').open)),
+  );
 
   // Le canvas ne doit jamais rester noir après un redimensionnement.
   const repaint = await phonePage.evaluate(() => {

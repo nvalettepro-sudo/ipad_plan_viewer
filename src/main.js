@@ -329,6 +329,12 @@ function wireUi() {
   $('btn-scale').addEventListener('click', () => openScaleDialog());
   $('btn-export').addEventListener('click', () => exportPdf());
   $('btn-menu').addEventListener('click', () => openMenu());
+  // Écouteur en phase de bouillonnement : les gestionnaires des boutons ont
+  // déjà tourné quand il ferme le menu. C'est ce qui permet à « Drive »
+  // d'ouvrir sa popup dans le même geste utilisateur.
+  $('dlg-menu').addEventListener('click', (e) => {
+    if (e.target.closest('.menu-list button')) $('dlg-menu').close();
+  });
 
   $('chk-snap').addEventListener('change', (e) => view.setSnapEnabled(e.target.checked));
   $('chk-grid').addEventListener('change', (e) => {
@@ -528,21 +534,22 @@ function refreshInspector() {
 }
 
 function syncScaleUi() {
-  const button = $('btn-scale');
+  const label = $('scale-label');
+  const alert = $('menu-alert');
   if (!state.layers) {
-    $('scale-label').textContent = 'Échelle';
-    button.classList.remove('scale-warn');
-    button.title = '';
+    label.textContent = '—';
+    label.className = 'menu-value';
+    alert.hidden = true;
     return;
   }
   const layer = currentLayer();
   // Tant que l'échelle n'a pas été confirmée pour cette page, elle n'est qu'une
   // valeur héritée : le « ? » évite de mesurer en croyant l'échelle établie.
-  $('scale-label').textContent = `${formatScale(layer.scale)}${layer.scaleSet ? '' : ' ?'}`;
-  button.classList.toggle('scale-warn', !layer.scaleSet);
-  button.title = layer.scaleSet
-    ? 'Échelle confirmée pour cette page'
-    : 'Échelle non confirmée pour cette page — calibrez sur une cote imprimée';
+  label.textContent = `${formatScale(layer.scale)}${layer.scaleSet ? '' : ' ?'}`;
+  label.className = `menu-value${layer.scaleSet ? '' : ' scale-warn'}`;
+  // Le menu étant fermé la plupart du temps, l'alerte doit rester visible
+  // depuis la barre d'outils.
+  alert.hidden = layer.scaleSet;
 }
 
 async function refreshRecentList() {
