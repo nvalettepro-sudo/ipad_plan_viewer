@@ -30,6 +30,31 @@ export function axisLineSegmentIntersection(axis, value, ax, ay, bx, by) {
   return f0 + t * (f1 - f0);
 }
 
+/**
+ * Intersection de deux segments, avec une marge de tolérance.
+ *
+ * `pad` (en unités PDF) prolonge virtuellement chaque segment : dans un export
+ * CAO, deux murs formant un angle ne se croisent pas toujours exactement — ils
+ * s'arrêtent parfois à une fraction de point l'un de l'autre.
+ *
+ * @returns {{x:number, y:number}|null} null si parallèles ou hors portée
+ */
+export function segmentIntersection(ax, ay, bx, by, cx, cy, dx, dy, pad = 0) {
+  const r = { x: bx - ax, y: by - ay };
+  const s = { x: dx - cx, y: dy - cy };
+  const denom = r.x * s.y - r.y * s.x;
+  if (Math.abs(denom) < 1e-9) return null; // parallèles
+
+  const t = ((cx - ax) * s.y - (cy - ay) * s.x) / denom;
+  const u = ((cx - ax) * r.y - (cy - ay) * r.x) / denom;
+
+  const padT = pad / (Math.hypot(r.x, r.y) || 1);
+  const padU = pad / (Math.hypot(s.x, s.y) || 1);
+  if (t < -padT || t > 1 + padT || u < -padU || u > 1 + padU) return null;
+
+  return { x: ax + t * r.x, y: ay + t * r.y };
+}
+
 /** Rotation d'un vecteur (dx,dy) de `deg` degrés (sens trigonométrique, repère PDF y↑). */
 export function rotateVec(dx, dy, deg) {
   const r = (deg * Math.PI) / 180;

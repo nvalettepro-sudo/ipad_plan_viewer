@@ -11,13 +11,21 @@
  */
 
 import { OPS } from 'pdfjs-dist';
-import { axisLineSegmentIntersection, clamp, closestOnSegment } from '../core/geometry.js';
+import {
+  axisLineSegmentIntersection,
+  clamp,
+  closestOnSegment,
+  segmentIntersection,
+} from '../core/geometry.js';
 
 const CURVE_STEPS = 8;
 const MAX_SEGMENTS = 300_000;
 // Un export CAO produit des murs rigoureusement alignés : la tolérance ne sert
 // qu'à absorber les erreurs d'arrondi de l'extraction.
 const PARALLEL_EPS = 0.35;
+// Deux murs formant un angle ne se croisent pas toujours au point près dans un
+// export CAO : on prolonge légèrement chaque segment pour les faire se joindre.
+const CORNER_PAD = 1.5;
 
 /** Multiplication de matrices PDF [a,b,c,d,e,f] : `m` appliquée avant `base`. */
 function mul(base, m) {
@@ -315,6 +323,46 @@ export class SnapIndex {
     // Une extrémité l'emporte tant qu'elle reste dans un rayon raisonnable.
     if (best) return best;
     return bestEdge;
+  }
+
+  /**
+   * Angle le plus proche : point où deux tracés non parallèles se rencontrent.
+   *
+   * C'est le repère naturel d'un plan — un coin de pièce, un tableau de baie.
+   * Les paires sont testées deux à deux dans le voisinage, ce qui reste peu
+   * coûteux tant que le rayon est celui du doigt ; le nombre de candidats est
+   * malgré tout plafonné pour ne pas s'effondrer sur une zone très dense.
+   */
+  nearestCorner(p, radius, maxCandidates = 90) {
+    if (this.isEmpty) return null;
+    const seg = this.segments;
+
+    const near = [];
+    for (const s of this.#near(p, radius)) {
+      near.push(s);
+      if (near.length >= maxCandidates) break;
+    }
+
+    let best = null;
+    let bestD = radius;
+    for (let i = 0; i < near.length; i++) {
+      const a = near[i] * 4;
+      for (let j = i + 1; j < near.length; j++) {
+        const b = near[j] * 4;
+        const hit = segmentIntersection(
+          seg[a], seg[a + 1], seg[a + 2], seg[a + 3],
+          seg[b], seg[b + 1], seg[b + 2], seg[b + 3],
+          CORNER_PAD,
+        );
+        if (!hit) continue;
+        const d = Math.hypot(hit.x - p.x, hit.y - p.y);
+        if (d < bestD) {
+          bestD = d;
+          best = { x: hit.x, y: hit.y, kind: 'corner' };
+        }
+      }
+    }
+    return best;
   }
 
   /**

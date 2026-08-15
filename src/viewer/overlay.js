@@ -172,7 +172,16 @@ export function drawSnapMarker(ctx, vp, snap) {
   ctx.save();
   ctx.strokeStyle = SNAP_COLOR;
   ctx.lineWidth = 2;
-  if (snap.kind === 'endpoint') {
+  if (snap.kind === 'corner') {
+    // Une croix, pour distinguer un angle d'une simple extrémité.
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(p.x - 9, p.y - 9);
+    ctx.lineTo(p.x + 9, p.y + 9);
+    ctx.moveTo(p.x + 9, p.y - 9);
+    ctx.lineTo(p.x - 9, p.y + 9);
+    ctx.stroke();
+  } else if (snap.kind === 'endpoint') {
     ctx.strokeRect(p.x - 7, p.y - 7, 14, 14);
   } else {
     ctx.beginPath();
@@ -203,33 +212,66 @@ export function drawSnapGuides(ctx, vp, guides) {
   ctx.restore();
 }
 
-/** Grille magnétique — repli quand le PDF n'a pas de tracés vectoriels. */
-export function drawGrid(ctx, vp, stepPt) {
+/**
+ * Grille magnétique, comptée depuis `origin` (coordonnées PDF).
+ *
+ * Le tracé se fait dans l'espace du viewport de référence, aligné sur l'écran :
+ * pour une grille carrée, une page pivotée donne le même quadrillage, aux axes
+ * près, ce qui évite d'avoir à traiter la rotation.
+ */
+export function drawGrid(ctx, vp, stepPt, origin) {
   const stepPx = vp.lengthToScreen(stepPt);
-  if (stepPx < 8) return;
+  if (stepPx < 8) return; // trop dense pour être lisible
 
+  const [ox, oy] = vp.base.convertToViewportPoint(origin.x, origin.y);
   const rect = vp.visibleBaseRect();
   ctx.save();
   ctx.strokeStyle = 'rgba(0, 90, 160, 0.18)';
   ctx.lineWidth = 1;
   ctx.beginPath();
 
-  // La grille est alignée sur l'origine de la page, dans l'espace du viewport
-  // de référence (donc indépendante du zoom).
-  const startX = Math.floor(rect.x / stepPt) * stepPt;
-  const endX = rect.x + rect.width;
-  for (let x = startX; x <= endX; x += stepPt) {
+  const first = (min, o) => o + Math.ceil((min - o) / stepPt) * stepPt;
+
+  for (let x = first(rect.x, ox); x <= rect.x + rect.width; x += stepPt) {
     const sx = x * vp.scale + vp.tx;
     ctx.moveTo(sx, 0);
     ctx.lineTo(sx, vp.height);
   }
-  const startY = Math.floor(rect.y / stepPt) * stepPt;
-  const endY = rect.y + rect.height;
-  for (let y = startY; y <= endY; y += stepPt) {
+  for (let y = first(rect.y, oy); y <= rect.y + rect.height; y += stepPt) {
     const sy = y * vp.scale + vp.ty;
     ctx.moveTo(0, sy);
     ctx.lineTo(vp.width, sy);
   }
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * Origine de la grille : point bleu cerclé de blanc, comme les poignées d'angle
+ * des meubles — c'est une poignée, elle doit se lire comme telle.
+ */
+export function drawGridOrigin(ctx, vp, origin) {
+  const p = vp.toScreen(origin.x, origin.y);
+  ctx.save();
+
+  // Deux amorces d'axes : elles disent que ce point commande le quadrillage.
+  ctx.strokeStyle = SELECT_COLOR;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath();
+  ctx.moveTo(p.x - 26, p.y);
+  ctx.lineTo(p.x + 26, p.y);
+  ctx.moveTo(p.x, p.y - 26);
+  ctx.lineTo(p.x, p.y + 26);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+  ctx.fillStyle = SELECT_COLOR;
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2.5;
   ctx.stroke();
   ctx.restore();
 }

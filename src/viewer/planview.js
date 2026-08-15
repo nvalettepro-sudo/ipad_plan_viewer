@@ -18,6 +18,7 @@ import {
   drawDraftMeasure,
   drawFurniture,
   drawGrid,
+  drawGridOrigin,
   drawMeasure,
   drawSnapGuides,
   drawSnapMarker,
@@ -33,7 +34,9 @@ const HANDLE_TOLERANCE_PX = 26;
 const SNAP_RADIUS_PX = 22;
 const MIN_MEASURE_PX = 12;
 const QUALITY_DEBOUNCE_MS = 220;
-const GRID_STEPS_MM = [100, 250, 500, 1000, 2000, 5000];
+// Deux pas seulement : au-delà, choisir devient une corvée alors que 1 m et
+// 50 cm couvrent l'implantation de mobilier.
+export const GRID_STEPS_MM = [1000, 500];
 const FURNITURE_SNAP_PX = 20; // attraction des arêtes d'un meuble vers les murs
 const UNDO_DEPTH = 50;
 const UNDO_COALESCE_MS = 900;
@@ -176,6 +179,37 @@ export class PlanView {
   setGridEnabled(value) {
     this.gridEnabled = value;
     this.#draw();
+  }
+
+  /**
+   * Réglages de la grille, attachés à la page : origine et pas.
+   * L'origine `null` signifie « coin de la page », tant que l'utilisateur ne
+   * l'a pas déplacée.
+   */
+  get gridState() {
+    const layer = this.layer;
+    if (!layer) return null;
+    layer.grid ??= { x: null, y: null, stepMm: GRID_STEPS_MM[0] };
+    return layer.grid;
+  }
+
+  /** Origine de la grille en coordonnées PDF, valeurs par défaut résolues. */
+  gridOrigin() {
+    const grid = this.gridState;
+    const [x0, y0] = this.page?.view || [0, 0];
+    if (!grid) return { x: x0, y: y0 };
+    return { x: grid.x ?? x0, y: grid.y ?? y0 };
+  }
+
+  /** Bascule le pas de la grille entre 1 m et 50 cm. */
+  cycleGridStep() {
+    const grid = this.gridState;
+    if (!grid) return null;
+    this.pushUndo();
+    const index = GRID_STEPS_MM.indexOf(grid.stepMm);
+    grid.stepMm = GRID_STEPS_MM[(index + 1) % GRID_STEPS_MM.length];
+    this.#changed();
+    return grid.stepMm;
   }
 
   /** Affiche ou masque les cotes portées par les meubles (le nom reste). */
@@ -376,6 +410,11 @@ export class PlanView {
     this.#draw();
   }
 
+  /** Exposé pour les tests : accrochage grille d'un point, en coordonnées PDF. */
+  snapGridForTest(point) {
+    return this.#snapGrid(point);
+  }
+
   /** Recalcule l'affichage après un changement d'échelle ou d'unité. */
   refresh() {
     this.#draw();
@@ -404,6 +443,18 @@ export class PlanView {
       this.dragState = { kind: 'draft', startScreen: p };
       this.#draw();
       return;
+    }
+
+    // Poignée d'origine de la grille : elle n'existe que grille affichée, et
+    // se saisit directement — c'est un réglage visible, pas une annotation
+    // qu'on risquerait de déplacer sans le vouloir.
+    if (this.gridEnabled && this.tool === 'pan') {
+      const origin = this.gridOrigin();
+      if (dist(pdfPoint, origin) <= this.vp.lengthToPdf(HANDLE_TOLERANCE_PX)) {
+        this.dragState = { kind: 'grid', snapshot: structuredClone(this.layer) };
+        this.select(null);
+        return;
+      }
     }
 
     // Outil navigation : c'est aussi lui qui sert à sélectionner et à éditer.
@@ -445,6 +496,16 @@ export class PlanView {
       return;
     }
 
+    if (state.kind === 'grid') {
+      const snap = this.#snapGridOrigin(pdfPoint);
+      this.activeSnap = snap;
+      const grid = this.gridState;
+      grid.x = snap ? snap.x : pdfPoint.x;
+      grid.y = snap ? snap.y : pdfPoint.y;
+      this.#draw();
+      return;
+    }
+
     if (state.kind === 'move') {
       this.#applyMove(state, pdfPoint);
       this.#draw();
@@ -458,6 +519,17 @@ export class PlanView {
 
     if (state.kind === 'draft') {
       this.#commitDraft(p, moved);
+      return;
+    }
+
+    if (state.kind === 'grid') {
+      this.activeSnap = null;
+      if (moved) {
+        this.#pushSnapshot(state.snapshot);
+        this.#changed();
+      } else {
+        this.#draw();
+      }
       return;
     }
 
@@ -676,23 +748,31 @@ export class PlanView {
     return this.snapIndex ? this.snapIndex.maxReach : this.#snapRadiusPt;
   }
 
-  /** Pas de grille adapté au zoom courant, exprimé en points PDF. */
+  /** Pas de la grille en points PDF (1 m ou 50 cm selon le réglage). */
   #gridStepPt() {
-    const perMm = 1 / mmPerPt(this.scale);
-    for (const stepMm of GRID_STEPS_MM) {
-      const stepPt = stepMm * perMm;
-      if (this.vp.lengthToScreen(stepPt) >= 14) return stepPt;
-    }
-    return GRID_STEPS_MM[GRID_STEPS_MM.length - 1] * perMm;
+    return (this.gridState?.stepMm ?? GRID_STEPS_MM[0]) / mmPerPt(this.scale);
   }
 
   #snapGrid(point, axis = null) {
     if (!this.gridEnabled) return null;
     const step = this.#gridStepPt();
-    const round = (v) => Math.round(v / step) * step;
-    if (axis === 'h') return { x: round(point.x), y: point.y, kind: 'grid' };
-    if (axis === 'v') return { x: point.x, y: round(point.y), kind: 'grid' };
-    return { x: round(point.x), y: round(point.y), kind: 'grid' };
+    const origin = this.gridOrigin();
+    // Le pas est compté depuis l'origine, pas depuis le coin de la page :
+    // c'est tout l'intérêt de pouvoir déplacer celle-ci.
+    const round = (v, o) => o + Math.round((v - o) / step) * step;
+    if (axis === 'h') return { x: round(point.x, origin.x), y: point.y, kind: 'grid' };
+    if (axis === 'v') return { x: point.x, y: round(point.y, origin.y), kind: 'grid' };
+    return { x: round(point.x, origin.x), y: round(point.y, origin.y), kind: 'grid' };
+  }
+
+  /**
+   * Accrochage de l'origine de la grille : les angles d'abord — c'est le
+   * repère naturel — puis les tracés, puis rien.
+   */
+  #snapGridOrigin(point) {
+    if (!this.snapEnabled || !this.snapIndex || this.snapIndex.isEmpty) return null;
+    const radius = this.vp.lengthToPdf(HANDLE_TOLERANCE_PX);
+    return this.snapIndex.nearestCorner(point, radius) ?? this.snapIndex.nearest(point, radius);
   }
 
   /** Accrochage 2D : tracés du PDF, puis extrémités d'annotations, puis grille. */
@@ -914,7 +994,10 @@ export class PlanView {
 
     this.renderer.drawInto(ctx, this.vp);
 
-    if (this.gridEnabled) drawGrid(ctx, this.vp, this.#gridStepPt());
+    if (this.gridEnabled) {
+      const origin = this.gridOrigin();
+      drawGrid(ctx, this.vp, this.#gridStepPt(), origin);
+    }
 
     const opts = { scale: this.scale, unit: this.unit };
     for (const f of this.layer?.furniture || []) {
@@ -932,6 +1015,7 @@ export class PlanView {
       if (this.draft.axis) drawAxisGuide(ctx, this.vp, this.draft.origin, this.draft.axis);
       drawDraftMeasure(ctx, this.vp, this.draft, opts);
     }
+    if (this.gridEnabled) drawGridOrigin(ctx, this.vp, this.gridOrigin());
     if (this.activeSnapGuides.length) drawSnapGuides(ctx, this.vp, this.activeSnapGuides);
     if (this.activeSnap) drawSnapMarker(ctx, this.vp, this.activeSnap);
 

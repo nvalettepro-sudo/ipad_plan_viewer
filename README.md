@@ -242,6 +242,8 @@ Dans la [console Google Cloud](https://console.cloud.google.com/) :
 | **Mesurer** + 1 doigt | Tracer une cote ; l'axe (H ou V) est choisi selon le sens du geste |
 | **Annuler** ↩︎ | Défaire la dernière action, quelle qu'elle soit (⌘Z au clavier) |
 | Bascule **Cotes** | Masquer les dimensions du mobilier, en gardant les noms |
+| Bascule **Grille** + pastille **1 m / 50 cm** | Afficher le quadrillage et changer son pas |
+| Glisser le **point bleu** | Déplacer l'origine de la grille (s'accroche aux angles) |
 | **Meuble** | Créer un rectangle aux dimensions réelles saisies |
 | **Échelle** | Choisir 1/N, ou calibrer sur une cote connue du plan |
 | **Export** | Générer le PDF annoté, puis *Partager* (feuille iOS) ou *Télécharger* |
@@ -275,6 +277,17 @@ conserve l'axe et se raccroche à un autre trait. Les **arêtes des meubles déj
 posés** comptent comme des traits : on cote donc aussi bien d'un mur à un
 meuble que de mur à mur. Décochez **Accrochage** pour retrouver un placement
 libre (indispensable sur un PDF scanné).
+
+**La grille a une origine visible et déplaçable.** Quand elle est affichée, un
+point bleu cerclé de blanc — la même poignée que sur les angles des meubles —
+marque le point d'où part le quadrillage, avec deux amorces d'axes en
+pointillés. Faites-le glisser pour caler la grille où vous voulez : il
+s'accroche en priorité aux **angles** du plan (deux tracés qui se rencontrent),
+puis aux tracés simples. Le repère d'accrochage prend la forme d'une croix
+verte sur un angle, d'un carré sur une extrémité, d'un cercle sur un bord.
+
+Le pas se choisit entre **1 m et 50 cm** par la pastille voisine de la case
+*Grille*. Origine et pas sont enregistrés par page.
 
 **Accrochage** : actif si le PDF contient des tracés vectoriels (export direct
 depuis Archicad, AutoCAD…). Pendant une cote contrainte, l'accrochage cherche les

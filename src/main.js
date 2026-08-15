@@ -124,6 +124,7 @@ async function boot() {
       if (count === 0) {
         $('chk-grid').checked = true;
         view.setGridEnabled(true);
+        syncGridUi();
         toast(
           "Aucun tracé vectoriel dans ce PDF (scan ?) : l'accrochage est indisponible, la grille magnétique a été activée.",
           { duration: 6000 },
@@ -220,6 +221,7 @@ async function openPlan(id) {
   await setSetting('lastPlanId', id);
   syncToolButtons();
   syncScaleUi();
+  syncGridUi();
   updateStatus();
   refreshInspector();
   setBusy(null);
@@ -329,7 +331,15 @@ function wireUi() {
   $('btn-menu').addEventListener('click', () => openMenu());
 
   $('chk-snap').addEventListener('change', (e) => view.setSnapEnabled(e.target.checked));
-  $('chk-grid').addEventListener('change', (e) => view.setGridEnabled(e.target.checked));
+  $('chk-grid').addEventListener('change', (e) => {
+    view.setGridEnabled(e.target.checked);
+    syncGridUi();
+  });
+  $('btn-grid-step').addEventListener('click', () => {
+    view.cycleGridStep();
+    syncGridUi();
+    autosave.schedule();
+  });
   $('chk-dims').addEventListener('change', (e) => {
     view.setShowDimensions(e.target.checked);
     setSetting('showFurnitureDims', e.target.checked);
@@ -383,6 +393,16 @@ function wireUi() {
   wireExportDialog();
 }
 
+/** Pastille du pas de grille : visible seulement quand la grille l'est. */
+function syncGridUi() {
+  const chip = $('btn-grid-step');
+  const on = Boolean(view?.gridEnabled && state.plan);
+  chip.hidden = !on;
+  if (!on) return;
+  const stepMm = view.gridState?.stepMm ?? 1000;
+  chip.textContent = stepMm >= 1000 ? `${stepMm / 1000} m` : `${stepMm / 10} cm`;
+}
+
 /** Annule la dernière action, quelle qu'elle soit. */
 function undoLastAction() {
   if (!view?.undo()) {
@@ -391,6 +411,7 @@ function undoLastAction() {
   }
   refreshInspector();
   syncScaleUi();
+  syncGridUi();
   autosave.schedule();
 }
 
@@ -908,6 +929,7 @@ async function showPage(index) {
   await saveLayers(state.layers);
   setBusy(null);
   syncScaleUi();
+  syncGridUi();
   updateStatus();
   refreshInspector();
 

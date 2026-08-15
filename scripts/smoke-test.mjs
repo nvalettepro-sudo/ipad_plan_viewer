@@ -381,6 +381,71 @@ try {
     v.refresh();
   });
 
+  // ── Grille : origine visible, déplaçable, accrochée aux angles ────────
+  await page.click('#chk-grid');
+  check(
+    'Grille : pastille de pas affichée',
+    !(await page.locator('#btn-grid-step').isHidden()) &&
+      (await page.textContent('#btn-grid-step')) === '1 m',
+    await page.textContent('#btn-grid-step'),
+  );
+  await page.click('#btn-grid-step');
+  check(
+    'Grille : bascule 1 m → 50 cm',
+    (await page.evaluate(() => window.planViewer.view.gridState.stepMm)) === 500 &&
+      (await page.textContent('#btn-grid-step')) === '50 cm',
+    await page.textContent('#btn-grid-step'),
+  );
+  await page.click('#btn-grid-step');
+
+  // L'origine part du coin de la page tant qu'on ne l'a pas déplacée.
+  const gridStart = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    v.select(null);
+    const o = v.gridOrigin();
+    return { pdf: o, screen: v.vp.toScreen(o.x, o.y), pageCorner: v.page.view.slice(0, 2) };
+  });
+  check(
+    'Grille : origine au coin de la page par défaut',
+    Math.abs(gridStart.pdf.x - gridStart.pageCorner[0]) < 0.01 &&
+      Math.abs(gridStart.pdf.y - gridStart.pageCorner[1]) < 0.01,
+  );
+
+  // On la tire vers l'angle intérieur des murs (100, 100), en visant à côté :
+  // l'accrochage doit terminer le travail.
+  const cornerTarget = await page.evaluate(() => window.planViewer.view.vp.toScreen(112, 113));
+  const gFrom = at(gridStart.screen);
+  const gTo = at(cornerTarget);
+  await page.mouse.move(gFrom.x, gFrom.y);
+  await page.mouse.down();
+  await page.mouse.move((gFrom.x + gTo.x) / 2, (gFrom.y + gTo.y) / 2, { steps: 10 });
+  await page.mouse.move(gTo.x, gTo.y, { steps: 10 });
+  await page.mouse.up();
+
+  const gridMoved = await page.evaluate(() => window.planViewer.view.gridOrigin());
+  check(
+    'Grille : origine accrochée sur l’angle des murs',
+    Math.abs(gridMoved.x - 100) < 0.01 && Math.abs(gridMoved.y - 100) < 0.01,
+    `origine en (${gridMoved.x.toFixed(2)}, ${gridMoved.y.toFixed(2)}) — angle en (100, 100)`,
+  );
+
+  // Le pas se compte désormais depuis cette origine.
+  const snapped = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const perMm = 1 / (25.4 / 72) / v.layer.scale.ratio;
+    const step = 1000 * perMm; // 1 m
+    // Un point à 1 m + 3 pt de l'origine doit retomber pile sur 1 m.
+    return { step, snapped: v.snapGridForTest({ x: 100 + step + 3, y: 100 + step + 3 }) };
+  });
+  check(
+    'Grille : accrochage compté depuis l’origine',
+    Math.abs(snapped.snapped.x - (100 + snapped.step)) < 0.01 &&
+      Math.abs(snapped.snapped.y - (100 + snapped.step)) < 0.01,
+  );
+
+  await page.click('#chk-grid');
+  check('Grille masquée : pastille retirée', await page.locator('#btn-grid-step').isHidden());
+
   // ── Annulation ────────────────────────────────────────────────────────
   const undoStart = await page.evaluate(() => ({
     furniture: window.planViewer.view.layer.furniture.length,
