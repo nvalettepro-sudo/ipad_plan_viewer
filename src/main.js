@@ -47,6 +47,14 @@ function setBusy(text) {
   if (text) $('busy-text').textContent = text;
 }
 
+/**
+ * Sur écran étroit, la barre d'état ne peut pas tout porter. Le nom du fichier
+ * est ce qu'on sacrifie : il reste consultable dans « Mes plans » et dans le
+ * sélecteur de page, alors que le diagnostic (page, tracés) n'apparaît nulle
+ * part ailleurs.
+ */
+const compactStatus = window.matchMedia('(max-width: 560px)');
+
 /** Calque de la page affichée : échelle et annotations sont propres à la page. */
 const currentLayer = () => (state.layers ? pageLayer(state.layers, state.layers.pageIndex ?? 0) : null);
 
@@ -320,6 +328,9 @@ function wireUi() {
   });
   window.addEventListener('pagehide', () => autosave.flush());
 
+  // Rotation de l'iPad, Slide Over : le seuil peut être franchi en cours de route.
+  compactStatus.addEventListener('change', updateStatus);
+
   wireScaleDialog();
   wireFurnitureDialog();
   wireMenuDialog();
@@ -350,16 +361,33 @@ function setSaveState(status) {
 }
 
 function updateStatus() {
-  const parts = [];
-  if (state.plan) {
-    parts.push(state.plan.name);
-    if (state.plan.pageCount > 1) parts.push(`page ${(state.layers.pageIndex ?? 0) + 1}/${state.plan.pageCount}`);
-    if (state.vectorSegments === 0) parts.push('sans tracés vectoriels');
-    else if (state.vectorSegments > 0) parts.push(`${state.vectorSegments.toLocaleString('fr-FR')} tracés`);
-  } else {
-    parts.push('Aucun plan');
+  const name = document.querySelector('#status-doc .doc-name');
+  const meta = document.querySelector('#status-doc .doc-meta');
+
+  if (!state.plan) {
+    name.textContent = 'Aucun plan';
+    meta.textContent = '';
+    $('chk-snap').disabled = false;
+    return;
   }
-  $('status-doc').textContent = parts.join(' · ');
+
+  const compact = compactStatus.matches;
+  const page = (state.layers.pageIndex ?? 0) + 1;
+  const parts = [];
+  if (state.plan.pageCount > 1) {
+    parts.push(compact ? `p.${page}/${state.plan.pageCount}` : `page ${page}/${state.plan.pageCount}`);
+  }
+  // « sans tracés » est une alerte : elle passe partout. Le nombre de tracés
+  // n'est qu'un indicateur de confort, on le laisse tomber sur écran étroit.
+  if (state.vectorSegments === 0) parts.push('sans tracés');
+  else if (state.vectorSegments > 0 && !compact) {
+    parts.push(`${state.vectorSegments.toLocaleString('fr-FR')} tracés`);
+  }
+
+  name.textContent = compact ? '' : state.plan.name;
+  const info = parts.join(' · ');
+  meta.textContent = name.textContent && info ? ` · ${info}` : info;
+
   $('chk-snap').disabled = state.vectorSegments === 0;
 }
 

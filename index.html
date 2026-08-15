@@ -111,8 +111,12 @@
 
       <!-- ── Barre d'état ───────────────────────────────────────────────── -->
       <footer class="statusbar" id="statusbar">
-        <span id="status-doc">Aucun plan</span>
-        <span class="spacer"></span>
+        <!-- Le nom se tronque, les informations de diagnostic jamais : c'est ce
+             qui garde la barre sur une seule ligne, donc de hauteur constante. -->
+        <span id="status-doc">
+          <span class="doc-name">Aucun plan</span>
+          <span class="doc-meta"></span>
+        </span>
         <label class="chk" title="Accrochage sur les tracés du PDF">
           <input type="checkbox" id="chk-snap" checked /> Accrochage
         </label>

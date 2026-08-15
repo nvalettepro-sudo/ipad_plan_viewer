@@ -270,6 +270,77 @@ try {
     privateErrors.slice(0, 2).join(' | '),
   );
   await privateContext.close();
+
+  // ── iPhone : la barre d'état ne doit jamais changer de hauteur ─────────
+  // Un nom de plan long qui passe de 2 à 3 lignes quand « Enregistré »
+  // apparaît redimensionne la zone de rendu, ce qui fait sauter tout l'écran
+  // et provoque un flash noir sur le canvas.
+  const phone = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 3,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const phonePage = await phone.newPage();
+  await phonePage.goto(URL, { waitUntil: 'networkidle' });
+  await phonePage.waitForFunction(() => Boolean(window.planViewer?.view), null, { timeout: 15_000 });
+  // Contexte neuf : sa base est vide, il faut y réimporter un plan.
+  await phonePage.evaluate(async (b64) => {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    window.planViewer.importPdf('plan-test.pdf', bytes.buffer, { type: 'file' });
+  }, pdfBytes);
+  await phonePage.waitForFunction(() => document.getElementById('dlg-page').open, null, { timeout: 20_000 });
+  await phonePage.locator('#page-grid .page-card').nth(0).click();
+  await phonePage.waitForFunction(() => Boolean(window.planViewer.state.plan), null, { timeout: 20_000 });
+  await phonePage.evaluate(() => document.getElementById('dlg-scale').close('cancel'));
+  await phonePage.waitForFunction(() => window.planViewer.view.snapIndex !== null, null, { timeout: 20_000 });
+
+  const heights = await phonePage.evaluate(async () => {
+    const bar = document.getElementById('statusbar');
+    const stage = document.getElementById('stage');
+    const save = document.getElementById('status-save');
+    const seen = new Set();
+    const record = () => seen.add(`${bar.offsetHeight}/${stage.offsetHeight}`);
+
+    // Nom très long, comme « 01 Plan B2 - Appart 305.pdf · 6 128 tracés ».
+    document.querySelector('#status-doc .doc-name').textContent =
+      '01 Plan B2 - Appart 305 niveau R+2 version def.pdf';
+    document.querySelector('#status-doc .doc-meta').textContent = ' · page 1/3 · 6 128 tracés';
+    record();
+
+    for (const text of ['Enregistrement…', 'Enregistré', '', 'Session temporaire']) {
+      save.textContent = text;
+      await new Promise((r) => requestAnimationFrame(r));
+      record();
+    }
+    return [...seen];
+  });
+  check(
+    'iPhone : hauteur de la barre d’état constante',
+    heights.length === 1,
+    heights.join(' · '),
+  );
+
+  // Le canvas ne doit jamais rester noir après un redimensionnement.
+  const repaint = await phonePage.evaluate(() => {
+    const v = window.planViewer.view;
+    const canvas = document.getElementById('viewport-canvas');
+    const stage = document.getElementById('stage');
+    stage.style.height = `${stage.offsetHeight - 24}px`;
+    v.resize(); // synchrone : le repaint doit avoir eu lieu au retour
+    const ctx = canvas.getContext('2d');
+    const { data } = ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1);
+    stage.style.height = '';
+    return { r: data[0], g: data[1], b: data[2] };
+  });
+  check(
+    'Redimensionnement : pas de canvas noir',
+    repaint.r + repaint.g + repaint.b > 60,
+    `pixel central rgb(${repaint.r},${repaint.g},${repaint.b})`,
+  );
+  await phone.close();
 } finally {
   await browser?.close();
   server.kill('SIGTERM');

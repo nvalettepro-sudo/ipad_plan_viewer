@@ -185,18 +185,28 @@ export class PlanView {
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
     const w = Math.round(rect.width * dpr);
     const h = Math.round(rect.height * dpr);
-    if (this.canvas.width !== w || this.canvas.height !== h) {
+    const changed = this.canvas.width !== w || this.canvas.height !== h || this.dpr !== dpr;
+
+    if (changed) {
+      // Écrire dans canvas.width efface le canvas — en `alpha: false`, il vire
+      // au noir. Attendre la frame suivante pour redessiner laisse voir ce
+      // flash noir : le repaint plus bas est donc synchrone, pas en rAF.
       this.canvas.width = w;
       this.canvas.height = h;
+      this.dpr = dpr;
     }
-    this.dpr = dpr;
+
+    // Toujours recalculé, même sans changement de canvas : la page courante
+    // peut avoir d'autres dimensions que la précédente.
     this.vp.setContainer(rect.width, rect.height);
     this.vp.refreshFitScale();
     this.vp.clampPan();
-    if (!silent) {
-      this.#draw();
-      this.#scheduleQuality();
-    }
+
+    // Sans changement réel, rien à repeindre : ResizeObserver se déclenche
+    // aussi pour des variations nulles.
+    if (silent || !changed) return;
+    this.#paint();
+    this.#scheduleQuality();
   }
 
   fit() {
