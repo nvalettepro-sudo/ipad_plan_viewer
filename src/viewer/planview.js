@@ -19,6 +19,7 @@ import {
   drawFurniture,
   drawGrid,
   drawMeasure,
+  drawSnapGuides,
   drawSnapMarker,
   FURNITURE_COLORS,
 } from './overlay.js';
@@ -33,6 +34,7 @@ const SNAP_RADIUS_PX = 22;
 const MIN_MEASURE_PX = 12;
 const QUALITY_DEBOUNCE_MS = 220;
 const GRID_STEPS_MM = [100, 250, 500, 1000, 2000, 5000];
+const FURNITURE_SNAP_PX = 20; // attraction des arêtes d'un meuble vers les murs
 const UNDO_DEPTH = 50;
 const UNDO_COALESCE_MS = 900;
 
@@ -72,6 +74,8 @@ export class PlanView {
     this.selection = null;
     this.draft = null;
     this.activeSnap = null;
+    /** Arêtes actuellement collées à un tracé, dessinées en vert pendant le geste. */
+    this.activeSnapGuides = [];
     this.dragState = null;
     this.thumbnail = null;
 
@@ -459,6 +463,7 @@ export class PlanView {
 
     if (state.kind === 'move') {
       this.activeSnap = null;
+      this.activeSnapGuides = [];
       this.opts.onHud?.(null);
       if (moved) {
         this.#pushSnapshot(state.snapshot);
@@ -486,6 +491,7 @@ export class PlanView {
     this.dragState = null;
     this.draft = null;
     this.activeSnap = null;
+    this.activeSnapGuides = [];
     this.opts.onHud?.(null);
     this.#draw();
   }
@@ -597,6 +603,65 @@ export class PlanView {
 
   // ── Accrochage ──────────────────────────────────────────────────────────
 
+  /**
+   * Boîte englobante d'un meuble. La rotation étant un multiple de 90°, elle
+   * reste alignée sur les axes : une simple permutation largeur/longueur.
+   */
+  #furnitureBox(item) {
+    const perMm = 1 / mmPerPt(this.scale);
+    const quarterTurn = Math.abs(Math.round(item.rot / 90)) % 2 === 1;
+    const bw = (quarterTurn ? item.widthMm : item.lengthMm) * perMm;
+    const bh = (quarterTurn ? item.lengthMm : item.widthMm) * perMm;
+    return {
+      x0: item.cx - bw / 2,
+      x1: item.cx + bw / 2,
+      y0: item.cy - bh / 2,
+      y1: item.cy + bh / 2,
+    };
+  }
+
+  /**
+   * Colle les arêtes d'un meuble aux tracés du plan : c'est ce qui permet de
+   * plaquer un meuble contre un mur au pixel près.
+   *
+   * Une seule correction par axe est retenue — la plus faible — pour ne pas
+   * tirailler le rectangle entre deux murs opposés.
+   */
+  #snapFurnitureToPlan(item) {
+    this.activeSnapGuides = [];
+    if (!this.snapEnabled || !this.snapIndex || this.snapIndex.isEmpty) return;
+
+    const radius = this.vp.lengthToPdf(FURNITURE_SNAP_PX);
+    const box = this.#furnitureBox(item);
+
+    const bestShift = (axis, edges, from, to) => {
+      let shift = null;
+      let guide = null;
+      for (const edge of edges) {
+        const hit = this.snapIndex.nearestParallel(axis, edge, from, to, radius);
+        if (hit === null) continue;
+        const delta = hit - edge;
+        if (shift === null || Math.abs(delta) < Math.abs(shift)) {
+          shift = delta;
+          guide = { axis, value: hit, from, to };
+        }
+      }
+      return { shift, guide };
+    };
+
+    const horizontal = bestShift('v', [box.x0, box.x1], box.y0, box.y1);
+    const vertical = bestShift('h', [box.y0, box.y1], box.x0, box.x1);
+
+    if (horizontal.shift !== null) {
+      item.cx += horizontal.shift;
+      this.activeSnapGuides.push(horizontal.guide);
+    }
+    if (vertical.shift !== null) {
+      item.cy += vertical.shift;
+      this.activeSnapGuides.push(vertical.guide);
+    }
+  }
+
   get #snapRadiusPt() {
     return this.vp.lengthToPdf(SNAP_RADIUS_PX);
   }
@@ -644,14 +709,58 @@ export class PlanView {
 
   /** Accrochage contraint le long de l'axe de cote. */
   #snapOnAxis(anchor, axis, point) {
-    const radius = this.#snapRadiusPt;
-    if (this.snapEnabled && this.snapIndex) {
-      // L'autre extrémité se pose sur l'intersection du trait de cote avec un
-      // tracé du plan : c'est ce qui fait coter d'un mur à l'autre.
-      const hit = this.snapIndex.nearestOnAxis(anchor, axis, point, radius, this.#maxSnapRadiusPt);
-      if (hit) return hit;
+    if (!this.snapEnabled) return null;
+    const target = axis === 'h' ? point.x : point.y;
+    let best = null;
+    let bestD = Infinity;
+
+    const consider = (candidate) => {
+      if (!candidate) return;
+      const d = Math.abs((axis === 'h' ? candidate.x : candidate.y) - target);
+      if (d < bestD) {
+        bestD = d;
+        best = candidate;
+      }
+    };
+
+    if (this.snapIndex) {
+      // Intersection du trait de cote avec un tracé du plan : c'est ce qui
+      // fait coter d'un mur à l'autre.
+      consider(this.snapIndex.nearestOnAxis(anchor, axis, point, this.#snapRadiusPt, this.#maxSnapRadiusPt));
     }
-    return null;
+    // Les meubles posés sont eux aussi des obstacles à coter : leurs arêtes
+    // valent les murs du plan.
+    consider(this.#furnitureEdgeOnAxis(anchor, axis, target));
+    return best;
+  }
+
+  /**
+   * Arête de meuble traversée par le trait de cote, la plus proche du doigt.
+   * @param {'h'|'v'} axis direction de la cote
+   */
+  #furnitureEdgeOnAxis(anchor, axis, target) {
+    let best = null;
+    let bestD = Infinity;
+
+    for (const item of this.layer?.furniture || []) {
+      const box = this.#furnitureBox(item);
+      // Le trait de cote doit réellement traverser le meuble.
+      const across = axis === 'h' ? anchor.y : anchor.x;
+      const lo = axis === 'h' ? box.y0 : box.x0;
+      const hi = axis === 'h' ? box.y1 : box.x1;
+      if (across < lo || across > hi) continue;
+
+      for (const edge of axis === 'h' ? [box.x0, box.x1] : [box.y0, box.y1]) {
+        const d = Math.abs(edge - target);
+        if (d >= bestD) continue;
+        bestD = d;
+        best =
+          axis === 'h'
+            ? { x: edge, y: anchor.y, kind: 'edge' }
+            : { x: anchor.x, y: edge, kind: 'edge' };
+      }
+    }
+    return best;
   }
 
   /** Les extrémités des cotes existantes servent aussi de points d'accrochage. */
@@ -745,13 +854,20 @@ export class PlanView {
     state.last = pdfPoint;
 
     if (hit.type === 'furniture') {
-      hit.object.cx += dx;
-      hit.object.cy += dy;
+      // On repart de la position libre à chaque déplacement : sans ça, un
+      // accrochage précédent freinerait le meuble contre le mur qui l'a happé.
+      state.free = state.free || { cx: hit.object.cx, cy: hit.object.cy };
+      state.free.cx += dx;
+      state.free.cy += dy;
+      hit.object.cx = state.free.cx;
+      hit.object.cy = state.free.cy;
+
       const snapped = this.#snapGrid({ x: hit.object.cx, y: hit.object.cy });
       if (snapped) {
         hit.object.cx = snapped.x;
         hit.object.cy = snapped.y;
       }
+      this.#snapFurnitureToPlan(hit.object);
       return;
     }
 
@@ -816,6 +932,7 @@ export class PlanView {
       if (this.draft.axis) drawAxisGuide(ctx, this.vp, this.draft.origin, this.draft.axis);
       drawDraftMeasure(ctx, this.vp, this.draft, opts);
     }
+    if (this.activeSnapGuides.length) drawSnapGuides(ctx, this.vp, this.activeSnapGuides);
     if (this.activeSnap) drawSnapMarker(ctx, this.vp, this.activeSnap);
 
     this.#updateMinimap();

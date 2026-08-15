@@ -260,13 +260,21 @@ désigner. Une pastille ✏️ apparaît alors dans la barre du bas, à la place
 informations du document, et le déplie à la demande. La replier ne
 désélectionne pas : l'objet reste manipulable au doigt.
 
+**Un meuble se plaque contre un mur.** En le faisant glisser, ses arêtes sont
+attirées par les tracés du plan qui leur font face — et par ceux-là seulement,
+pas par un mur situé dans leur prolongement. Une seule correction par axe est
+retenue, la plus faible, pour ne pas tirailler le rectangle entre deux murs
+opposés. Les arêtes effectivement collées s'affichent en vert pendant le geste.
+
 **Une cote va toujours d'un trait à l'autre.** L'axe du geste fixe la ligne de
 cote ; ses deux extrémités se posent ensuite sur les tracés que cette ligne
 rencontre, chacune sur le plus proche du doigt. La recherche s'élargit tant
 qu'aucun tracé n'est trouvé, de sorte qu'une extrémité ne reste jamais « en
 l'air ». Une extrémité déjà posée se reprend en tirant sa poignée : elle
-conserve l'axe et se raccroche à un autre trait. Décochez **Accrochage** pour
-retrouver un placement libre (indispensable sur un PDF scanné).
+conserve l'axe et se raccroche à un autre trait. Les **arêtes des meubles déjà
+posés** comptent comme des traits : on cote donc aussi bien d'un mur à un
+meuble que de mur à mur. Décochez **Accrochage** pour retrouver un placement
+libre (indispensable sur un PDF scanné).
 
 **Accrochage** : actif si le PDF contient des tracés vectoriels (export direct
 depuis Archicad, AutoCAD…). Pendant une cote contrainte, l'accrochage cherche les

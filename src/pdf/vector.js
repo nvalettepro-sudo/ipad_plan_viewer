@@ -15,6 +15,9 @@ import { axisLineSegmentIntersection, clamp, closestOnSegment } from '../core/ge
 
 const CURVE_STEPS = 8;
 const MAX_SEGMENTS = 300_000;
+// Un export CAO produit des murs rigoureusement alignés : la tolérance ne sert
+// qu'à absorber les erreurs d'arrondi de l'extraction.
+const PARALLEL_EPS = 0.35;
 
 /** Multiplication de matrices PDF [a,b,c,d,e,f] : `m` appliquée avant `base`. */
 function mul(base, m) {
@@ -241,8 +244,13 @@ export class SnapIndex {
 
   /** Itère les index de segments présents dans le voisinage carré de `p`. */
   *#near(p, radius) {
-    const [c0, r0] = this.#cellOf(p.x - radius, p.y - radius);
-    const [c1, r1] = this.#cellOf(p.x + radius, p.y + radius);
+    yield* this.#nearBox(p.x - radius, p.y - radius, p.x + radius, p.y + radius);
+  }
+
+  /** Itère les index de segments qui touchent la boîte donnée. */
+  *#nearBox(minX, minY, maxX, maxY) {
+    const [c0, r0] = this.#cellOf(minX, minY);
+    const [c1, r1] = this.#cellOf(maxX, maxY);
     const seen = new Set();
     for (let row = r0; row <= r1; row++) {
       for (let col = c0; col <= c1; col++) {
@@ -307,6 +315,53 @@ export class SnapIndex {
     // Une extrémité l'emporte tant qu'elle reste dans un rayon raisonnable.
     if (best) return best;
     return bestEdge;
+  }
+
+  /**
+   * Cherche un tracé parallèle à une arête, pour poser un meuble contre un mur.
+   *
+   * @param {'h'|'v'} axis 'v' = on cherche un tracé vertical près de `value`
+   * @param {number} value abscisse (ou ordonnée) de l'arête du meuble
+   * @param {number} from début de l'arête sur l'autre axe
+   * @param {number} to fin de l'arête sur l'autre axe
+   * @param {number} radius distance maximale d'attraction, en unités PDF
+   * @returns {number|null} coordonnée du tracé trouvé
+   */
+  nearestParallel(axis, value, from, to, radius) {
+    if (this.isEmpty) return null;
+    const seg = this.segments;
+    const lo = Math.min(from, to);
+    const hi = Math.max(from, to);
+    const box =
+      axis === 'v'
+        ? [value - radius, lo, value + radius, hi]
+        : [lo, value - radius, hi, value + radius];
+
+    let best = null;
+    let bestD = radius;
+    for (const s of this.#nearBox(...box)) {
+      const ax = seg[s * 4];
+      const ay = seg[s * 4 + 1];
+      const bx = seg[s * 4 + 2];
+      const by = seg[s * 4 + 3];
+
+      // Le tracé doit être parallèle à l'arête…
+      const along = axis === 'v' ? Math.abs(ax - bx) : Math.abs(ay - by);
+      if (along > PARALLEL_EPS) continue;
+
+      const coord = axis === 'v' ? ax : ay;
+      const d = Math.abs(coord - value);
+      if (d >= bestD) continue;
+
+      // …et se trouver en regard d'elle, pas juste dans son prolongement.
+      const spanLo = axis === 'v' ? Math.min(ay, by) : Math.min(ax, bx);
+      const spanHi = axis === 'v' ? Math.max(ay, by) : Math.max(ax, bx);
+      if (spanHi < lo || spanLo > hi) continue;
+
+      bestD = d;
+      best = coord;
+    }
+    return best;
   }
 
   /**

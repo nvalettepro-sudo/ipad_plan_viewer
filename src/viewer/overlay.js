@@ -182,6 +182,27 @@ export function drawSnapMarker(ctx, vp, snap) {
   ctx.restore();
 }
 
+/**
+ * Traits verts marquant les arêtes actuellement collées à un tracé du plan.
+ * Sans ce retour, rien ne distingue un meuble « posé contre le mur » d'un
+ * meuble simplement lâché à peu près au bon endroit.
+ */
+export function drawSnapGuides(ctx, vp, guides) {
+  ctx.save();
+  ctx.strokeStyle = SNAP_COLOR;
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  for (const g of guides) {
+    const a = g.axis === 'v' ? vp.toScreen(g.value, g.from) : vp.toScreen(g.from, g.value);
+    const b = g.axis === 'v' ? vp.toScreen(g.value, g.to) : vp.toScreen(g.to, g.value);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /** Grille magnétique — repli quand le PDF n'a pas de tracés vectoriels. */
 export function drawGrid(ctx, vp, stepPt) {
   const stepPx = vp.lengthToScreen(stepPt);

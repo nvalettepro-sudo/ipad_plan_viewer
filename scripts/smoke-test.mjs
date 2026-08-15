@@ -304,6 +304,83 @@ try {
     `champ « ${await nameField.inputValue()} », focus sur ${await page.evaluate(() => document.activeElement?.tagName)}`,
   );
 
+  // ── Meuble plaqué contre un mur ───────────────────────────────────────
+  // Le mur gauche du plan de test est en x = 100. Lâché un peu à droite, le
+  // meuble doit voir son arête gauche se coller exactement dessus.
+  const wallSnap = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const f = v.layer.furniture[0];
+    // y = 420 : à l'écart de la cote existante (y ≈ 297) et du refend, sinon
+    // c'est la cote qui capte la sélection et le glissement se met à naviguer.
+    Object.assign(f, { rot: 0, lengthMm: 2000, widthMm: 900, cx: 300, cy: 420 });
+    v.select({ type: 'furniture', id: f.id });
+    v.refresh();
+    return v.vp.toScreen(f.cx, f.cy);
+  });
+  const grabItem = at(wallSnap);
+  // Cible : arête gauche à ~4 pt du mur, donc dans le rayon d'attraction.
+  const wallTarget = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const f = v.layer.furniture[0];
+    const perMm = 1 / (25.4 / 72) / v.layer.scale.ratio;
+    const halfWidth = (f.lengthMm * perMm) / 2;
+    return v.vp.toScreen(100 + halfWidth + 4, f.cy);
+  });
+  const dropItem = at(wallTarget);
+  await page.mouse.move(grabItem.x, grabItem.y);
+  await page.mouse.down();
+  await page.mouse.move((grabItem.x + dropItem.x) / 2, grabItem.y, { steps: 8 });
+  await page.mouse.move(dropItem.x, dropItem.y, { steps: 8 });
+  await page.mouse.up();
+
+  const placed = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const f = v.layer.furniture[0];
+    const perMm = 1 / (25.4 / 72) / v.layer.scale.ratio;
+    return { left: f.cx - (f.lengthMm * perMm) / 2, cy: f.cy };
+  });
+  check(
+    'Meuble plaqué contre le mur',
+    Math.abs(placed.left - 100) < 0.01,
+    `arête gauche à x = ${placed.left.toFixed(2)} (mur à 100)`,
+  );
+
+  // ── Cote accrochée sur un meuble ──────────────────────────────────────
+  const furnitureEdge = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const f = v.layer.furniture[0];
+    const perMm = 1 / (25.4 / 72) / v.layer.scale.ratio;
+    const right = f.cx + (f.lengthMm * perMm) / 2;
+    v.select(null);
+    // Cote horizontale traversant le meuble, tracée du mur gauche vers son
+    // arête droite : l'extrémité doit se poser sur le meuble, pas sur un mur.
+    return { right, y: f.cy, start: v.vp.toScreen(110, f.cy), end: v.vp.toScreen(right + 6, f.cy) };
+  });
+  await page.click('#tool-measure');
+  const mStart = at(furnitureEdge.start);
+  const mEnd = at(furnitureEdge.end);
+  await page.mouse.move(mStart.x, mStart.y);
+  await page.mouse.down();
+  await page.mouse.move((mStart.x + mEnd.x) / 2, mStart.y, { steps: 8 });
+  await page.mouse.move(mEnd.x, mEnd.y, { steps: 8 });
+  await page.mouse.up();
+  const onFurniture = await page.evaluate(() => {
+    const list = window.planViewer.view.layer.measures;
+    return list[list.length - 1];
+  });
+  check(
+    'Cote accrochée sur l’arête d’un meuble',
+    Math.abs(onFurniture.b.x - furnitureEdge.right) < 0.01,
+    `x = ${onFurniture.b.x.toFixed(2)} (arête à ${furnitureEdge.right.toFixed(2)})`,
+  );
+  await page.click('#tool-pan');
+  await page.evaluate(() => {
+    const v = window.planViewer.view;
+    v.layer.measures.pop(); // on rend l'état attendu par la suite
+    v.select(null);
+    v.refresh();
+  });
+
   // ── Annulation ────────────────────────────────────────────────────────
   const undoStart = await page.evaluate(() => ({
     furniture: window.planViewer.view.layer.furniture.length,
