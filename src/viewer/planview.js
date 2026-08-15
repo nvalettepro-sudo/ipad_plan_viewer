@@ -33,6 +33,8 @@ const SNAP_RADIUS_PX = 22;
 const MIN_MEASURE_PX = 12;
 const QUALITY_DEBOUNCE_MS = 220;
 const GRID_STEPS_MM = [100, 250, 500, 1000, 2000, 5000];
+const UNDO_DEPTH = 50;
+const UNDO_COALESCE_MS = 900;
 
 export class PlanView {
   /**
@@ -76,6 +78,13 @@ export class PlanView {
     this.drawQueued = false;
     this.qualityTimer = null;
 
+    // Historique d'annulation : instantanés du calque de la page courante.
+    // Les calques sont de simples données, un clone est bien plus sûr qu'un
+    // journal d'opérations inverses à maintenir pour chaque type d'action.
+    this.undoStack = [];
+    this.lastUndoKey = null;
+    this.lastUndoAt = 0;
+
     this.gestures = new GestureController(canvas, {
       onDragStart: (p) => this.#onDragStart(p),
       onDragMove: (p) => this.#onDragMove(p),
@@ -112,6 +121,8 @@ export class PlanView {
     if (!this.pdf) return;
     const index = clamp(pageIndex, 0, this.pdf.numPages - 1);
     this.layers.pageIndex = index;
+    // L'historique porte sur une page : il n'a plus de sens sur une autre.
+    this.#clearUndo();
 
     this.page = await this.pdf.getPage(index + 1);
     const base = this.page.getViewport({ scale: 1 });
@@ -234,11 +245,67 @@ export class PlanView {
     this.#scheduleQuality();
   }
 
+  // ── Annulation ──────────────────────────────────────────────────────────
+
+  /**
+   * Enregistre l'état courant avant une modification.
+   *
+   * `key` regroupe les actions continues : toutes les frappes dans le champ
+   * « Nom » d'un même meuble ne forment qu'un seul point d'annulation, sinon
+   * annuler ne reculerait que d'une lettre.
+   */
+  pushUndo(key = null) {
+    if (!this.layer) return;
+    const now = performance.now();
+    if (key && key === this.lastUndoKey && now - this.lastUndoAt < UNDO_COALESCE_MS) {
+      this.lastUndoAt = now;
+      return;
+    }
+    this.lastUndoKey = key;
+    this.lastUndoAt = now;
+    this.#pushSnapshot(structuredClone(this.layer));
+  }
+
+  #pushSnapshot(snapshot) {
+    this.undoStack.push(snapshot);
+    if (this.undoStack.length > UNDO_DEPTH) this.undoStack.shift();
+    this.opts.onUndoChange?.(this.undoStack.length);
+  }
+
+  #clearUndo() {
+    this.undoStack = [];
+    this.lastUndoKey = null;
+    this.opts.onUndoChange?.(0);
+  }
+
+  get canUndo() {
+    return this.undoStack.length > 0;
+  }
+
+  /** Revient à l'état précédent. La position de la vue n'est pas touchée. */
+  undo() {
+    const previous = this.undoStack.pop();
+    if (!previous || !this.layers) return false;
+
+    // Annuler une modification ne doit pas ramener la caméra en arrière :
+    // l'utilisateur perdrait de vue ce qu'il vient de corriger.
+    previous.view = this.layer.view;
+    this.layers.pages[String(this.layers.pageIndex ?? 0)] = previous;
+
+    this.lastUndoKey = null;
+    this.select(null);
+    this.#draw();
+    this.opts.onUndoChange?.(this.undoStack.length);
+    this.opts.onChange?.({});
+    return true;
+  }
+
   // ── Annotations ─────────────────────────────────────────────────────────
 
   /** Ajoute un meuble au centre de la vue. */
   addFurniture({ label = '', lengthMm, widthMm, color = FURNITURE_COLORS[0] }) {
     if (!this.layers) return null;
+    this.pushUndo();
     const center = this.vp.toPdf(this.vp.width / 2, this.vp.height / 2);
     const item = {
       id: uid(),
@@ -259,9 +326,10 @@ export class PlanView {
   }
 
   /** Applique des modifications à l'objet sélectionné. */
-  updateSelected(patch) {
+  updateSelected(patch, undoKey = null) {
     const obj = this.getSelected();
     if (!obj) return;
+    this.pushUndo(undoKey ?? `${Object.keys(patch).join(',')}:${obj.id}`);
     Object.assign(obj, patch);
     this.#changed();
   }
@@ -269,12 +337,14 @@ export class PlanView {
   rotateSelected(deltaDeg = 90) {
     const obj = this.getSelected();
     if (!obj || this.selection.type !== 'furniture') return;
+    this.pushUndo();
     obj.rot = (((obj.rot + deltaDeg) % 360) + 360) % 360;
     this.#changed();
   }
 
   deleteSelected() {
     if (!this.selection || !this.layers) return;
+    this.pushUndo();
     const key = this.selection.type === 'furniture' ? 'furniture' : 'measures';
     this.layer[key] = this.layer[key].filter((o) => o.id !== this.selection.id);
     this.select(null);
@@ -283,6 +353,7 @@ export class PlanView {
 
   clearAnnotations() {
     if (!this.layers) return;
+    this.pushUndo();
     this.layer.measures = [];
     this.layer.furniture = [];
     this.select(null);
@@ -313,12 +384,19 @@ export class PlanView {
     const pdfPoint = this.vp.toPdf(p.x, p.y);
 
     if (this.tool === 'measure' || this.tool === 'calibrate') {
-      const snap = this.#snap(pdfPoint);
-      this.activeSnap = snap;
-      // On ne conserve que les coordonnées : `kind` ne sert qu'à l'affichage
-      // du repère d'accrochage et n'a rien à faire dans les données stockées.
-      const start = snap ? { x: snap.x, y: snap.y } : pdfPoint;
-      this.draft = { a: start, b: start, axis: null, free: this.tool === 'calibrate' };
+      if (this.tool === 'calibrate') {
+        // Segment de référence : libre, on accroche simplement au plus proche.
+        const snap = this.#snap(pdfPoint);
+        this.activeSnap = snap;
+        const start = snap ? { x: snap.x, y: snap.y } : pdfPoint;
+        this.draft = { origin: pdfPoint, a: start, b: start, axis: null, free: true };
+      } else {
+        // Cote : les deux extrémités seront posées sur des tracés que la cote
+        // TRAVERSE. L'accrochage n'a donc de sens qu'une fois l'axe connu,
+        // c'est-à-dire au premier déplacement — on garde le point brut ici.
+        this.draft = { origin: pdfPoint, a: pdfPoint, b: pdfPoint, axis: null, free: false };
+        this.activeSnap = null;
+      }
       this.dragState = { kind: 'draft', startScreen: p };
       this.#draw();
       return;
@@ -335,7 +413,9 @@ export class PlanView {
     const isSelected = hit && this.selection && hit.id === this.selection.id;
 
     if (isSelected) {
-      this.dragState = { kind: 'move', hit, last: pdfPoint };
+      // L'instantané est pris maintenant mais n'entre dans l'historique qu'à
+      // la fin du geste, et seulement si quelque chose a bougé.
+      this.dragState = { kind: 'move', hit, last: pdfPoint, snapshot: structuredClone(this.layer) };
       return;
     }
     this.dragState = { kind: 'pan', last: p, tapHit: hit };
@@ -380,8 +460,13 @@ export class PlanView {
     if (state.kind === 'move') {
       this.activeSnap = null;
       this.opts.onHud?.(null);
-      if (moved) this.#changed();
-      else this.#draw();
+      if (moved) {
+        this.#pushSnapshot(state.snapshot);
+        this.lastUndoKey = null;
+        this.#changed();
+      } else {
+        this.#draw();
+      }
       return;
     }
 
@@ -451,20 +536,25 @@ export class PlanView {
       return;
     }
 
-    // Cotation contrainte : on choisit l'axe dominant, puis on ne bouge que
-    // la coordonnée libre — comme une cote d'architecte.
-    const a = this.vp.toScreen(draft.a.x, draft.a.y);
+    // Cotation contrainte : l'axe dominant fixe la ligne de cote, qui passe par
+    // le point de départ. Les DEUX extrémités sont ensuite posées sur les
+    // tracés que cette ligne rencontre — une cote va d'un trait à l'autre.
+    const origin = draft.origin;
+    const o = this.vp.toScreen(origin.x, origin.y);
     const b = this.vp.toScreen(pdfPoint.x, pdfPoint.y);
-    const screenAxis = Math.abs(b.x - a.x) >= Math.abs(b.y - a.y) ? 'h' : 'v';
+    const screenAxis = Math.abs(b.x - o.x) >= Math.abs(b.y - o.y) ? 'h' : 'v';
     const axis = this.#pdfAxis(screenAxis);
     draft.axis = axis;
 
-    const constrained =
-      axis === 'h' ? { x: pdfPoint.x, y: draft.a.y } : { x: draft.a.x, y: pdfPoint.y };
+    const onLine = (point) =>
+      axis === 'h' ? { x: point.x, y: origin.y } : { x: origin.x, y: point.y };
 
-    const snap = this.#snapOnAxis(draft.a, axis, pdfPoint) || this.#snapGrid(constrained, axis);
-    this.activeSnap = snap;
-    draft.b = snap ? { x: snap.x, y: snap.y } : constrained;
+    const startSnap = this.#snapOnAxis(origin, axis, origin) || this.#snapGrid(onLine(origin), axis);
+    draft.a = startSnap ? { x: startSnap.x, y: startSnap.y } : onLine(origin);
+
+    const endSnap = this.#snapOnAxis(origin, axis, pdfPoint) || this.#snapGrid(onLine(pdfPoint), axis);
+    this.activeSnap = endSnap;
+    draft.b = endSnap ? { x: endSnap.x, y: endSnap.y } : onLine(pdfPoint);
 
     const lengthMm = dist(draft.a, draft.b) * mmPerPt(this.scale);
     this.opts.onHud?.(`${axis === 'h' ? '↔' : '↕'} ${formatLength(lengthMm, this.unit)}`);
@@ -493,6 +583,7 @@ export class PlanView {
       return;
     }
 
+    this.pushUndo();
     const measure = {
       id: uid(),
       type: 'measure',
@@ -508,6 +599,16 @@ export class PlanView {
 
   get #snapRadiusPt() {
     return this.vp.lengthToPdf(SNAP_RADIUS_PX);
+  }
+
+  /**
+   * Portée de la recherche élargie. Une cote doit relier deux traits : plutôt
+   * que d'abandonner l'accrochage quand rien n'est sous le doigt, on cherche
+   * plus loin. La recherche s'arrête au premier trait trouvé, donc elle ne
+   * coûte cher que sur un plan très clairsemé.
+   */
+  get #maxSnapRadiusPt() {
+    return this.snapIndex ? this.snapIndex.maxReach : this.#snapRadiusPt;
   }
 
   /** Pas de grille adapté au zoom courant, exprimé en points PDF. */
@@ -533,7 +634,7 @@ export class PlanView {
   #snap(point) {
     const radius = this.#snapRadiusPt;
     if (this.snapEnabled && this.snapIndex) {
-      const hit = this.snapIndex.nearest(point, radius);
+      const hit = this.snapIndex.nearest(point, radius, this.#maxSnapRadiusPt);
       if (hit) return hit;
     }
     const own = this.#snapToAnnotations(point, radius);
@@ -545,7 +646,9 @@ export class PlanView {
   #snapOnAxis(anchor, axis, point) {
     const radius = this.#snapRadiusPt;
     if (this.snapEnabled && this.snapIndex) {
-      const hit = this.snapIndex.nearestOnAxis(anchor, axis, point, radius);
+      // L'autre extrémité se pose sur l'intersection du trait de cote avec un
+      // tracé du plan : c'est ce qui fait coter d'un mur à l'autre.
+      const hit = this.snapIndex.nearestOnAxis(anchor, axis, point, radius, this.#maxSnapRadiusPt);
       if (hit) return hit;
     }
     return null;
@@ -710,7 +813,7 @@ export class PlanView {
     }
 
     if (this.draft) {
-      if (this.draft.axis) drawAxisGuide(ctx, this.vp, this.draft.a, this.draft.axis);
+      if (this.draft.axis) drawAxisGuide(ctx, this.vp, this.draft.origin, this.draft.axis);
       drawDraftMeasure(ctx, this.vp, this.draft, opts);
     }
     if (this.activeSnap) drawSnapMarker(ctx, this.vp, this.activeSnap);

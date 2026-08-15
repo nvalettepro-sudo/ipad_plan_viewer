@@ -188,6 +188,8 @@ export class SnapIndex {
     this.rows = Math.max(1, Math.ceil(pageBox.height / this.cell) + 1);
     /** @type {Map<number, number[]>} */
     this.grid = new Map();
+    /** Portée maximale d'une recherche élargie. */
+    this.maxReach = Math.hypot(pageBox.width, pageBox.height);
 
     for (let s = 0; s < this.count; s++) this.#insert(s);
   }
@@ -260,8 +262,18 @@ export class SnapIndex {
    * sinon point le plus proche sur un segment.
    * @returns {{x:number,y:number,kind:'endpoint'|'edge'}|null}
    */
-  nearest(p, radius) {
+  nearest(p, radius, maxRadius = radius) {
     if (this.isEmpty) return null;
+    // Recherche élargie : on double le rayon jusqu'à trouver, ce qui garantit
+    // qu'une cote démarre toujours sur un trait, même loin de tout.
+    for (let r = radius; ; r *= 2) {
+      const hit = this.#nearestWithin(p, r);
+      if (hit) return hit;
+      if (r >= Math.min(maxRadius, this.maxReach)) return null;
+    }
+  }
+
+  #nearestWithin(p, radius) {
     const seg = this.segments;
     let best = null;
     let bestD = radius;
@@ -309,8 +321,16 @@ export class SnapIndex {
    * @param {{x:number,y:number}} p position du doigt
    * @param {number} radius rayon d'accrochage en unités PDF
    */
-  nearestOnAxis(anchor, axis, p, radius) {
+  nearestOnAxis(anchor, axis, p, radius, maxRadius = radius) {
     if (this.isEmpty) return null;
+    for (let r = radius; ; r *= 2) {
+      const hit = this.#nearestOnAxisWithin(anchor, axis, p, r);
+      if (hit) return hit;
+      if (r >= Math.min(maxRadius, this.maxReach)) return null;
+    }
+  }
+
+  #nearestOnAxisWithin(anchor, axis, p, radius) {
     const seg = this.segments;
     const value = axis === 'h' ? anchor.y : anchor.x;
     const target = axis === 'h' ? p.x : p.y;

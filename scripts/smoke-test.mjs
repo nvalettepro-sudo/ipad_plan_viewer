@@ -136,6 +136,16 @@ try {
 
   const measures = await page.evaluate(() => window.planViewer.view.layer.measures);
   check('Cote créée au geste', measures.length === 1, `${measures.length} cote(s)`);
+  // Les lignes verticales du plan de test sont en x = 100, 400 et 700. Une
+  // cote tracée grossièrement doit voir ses DEUX extrémités s'y verrouiller,
+  // chacune sur la ligne la plus proche du doigt.
+  const walls = [100, 400, 700];
+  const onWall = (x) => walls.some((w) => Math.abs(x - w) < 0.01);
+  check(
+    'Les deux extrémités se posent sur un trait',
+    measures.length === 1 && onWall(measures[0].a.x) && onWall(measures[0].b.x),
+    measures.length === 1 ? `x = ${measures[0].a.x.toFixed(1)} → ${measures[0].b.x.toFixed(1)}` : '',
+  );
   if (measures.length === 1) {
     check('Cote contrainte à l’horizontale', Math.abs(measures[0].a.y - measures[0].b.y) < 1e-6);
   }
@@ -292,6 +302,74 @@ try {
       (await nameField.inputValue()) === 'Buffet' &&
       (await page.evaluate(() => window.planViewer.view.getSelected().label)) === 'Buffet',
     `champ « ${await nameField.inputValue()} », focus sur ${await page.evaluate(() => document.activeElement?.tagName)}`,
+  );
+
+  // ── Annulation ────────────────────────────────────────────────────────
+  const undoStart = await page.evaluate(() => ({
+    furniture: window.planViewer.view.layer.furniture.length,
+    label: window.planViewer.view.layer.furniture[0].label,
+    disabled: document.getElementById('btn-undo').disabled,
+  }));
+  check('Bouton Annuler actif après des modifications', undoStart.disabled === false);
+
+  // Une suppression s'annule.
+  await page.evaluate(() => {
+    const v = window.planViewer.view;
+    v.select({ type: 'furniture', id: v.layer.furniture[0].id });
+    v.deleteSelected();
+  });
+  check(
+    'Suppression effectuée',
+    (await page.evaluate(() => window.planViewer.view.layer.furniture.length)) === undoStart.furniture - 1,
+  );
+  await page.click('#btn-undo');
+  check(
+    'Annuler restaure le meuble supprimé',
+    (await page.evaluate(() => window.planViewer.view.layer.furniture.length)) === undoStart.furniture &&
+      (await page.evaluate(() => window.planViewer.view.layer.furniture[0].label)) === undoStart.label,
+  );
+
+  // Une rotation s'annule aussi.
+  await page.evaluate(() => {
+    const v = window.planViewer.view;
+    v.select({ type: 'furniture', id: v.layer.furniture[0].id });
+    v.rotateSelected(90);
+  });
+  const rotated = await page.evaluate(() => window.planViewer.view.layer.furniture[0].rot);
+  await page.click('#btn-undo');
+  check(
+    'Annuler défait la rotation',
+    rotated === 90 && (await page.evaluate(() => window.planViewer.view.layer.furniture[0].rot)) === 0,
+  );
+
+  // La saisie d'un nom ne forme qu'un seul point d'annulation.
+  const beforeTyping = await page.evaluate(() => window.planViewer.view.layer.furniture[0].label);
+  await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const id = v.layer.furniture[0].id;
+    v.select({ type: 'furniture', id });
+    for (const text of ['C', 'Ch', 'Cha', 'Chai', 'Chais', 'Chaise']) {
+      v.updateSelected({ label: text }, `label:${id}`);
+    }
+  });
+  await page.click('#btn-undo');
+  check(
+    'Annuler défait toute la saisie d’un nom, pas une lettre',
+    (await page.evaluate(() => window.planViewer.view.layer.furniture[0].label)) === beforeTyping,
+    `« ${await page.evaluate(() => window.planViewer.view.layer.furniture[0].label)} »`,
+  );
+
+  // La vue ne doit pas reculer avec l'annulation.
+  const zoomBefore = await page.evaluate(() => window.planViewer.view.vp.scale);
+  await page.evaluate(() => {
+    const v = window.planViewer.view;
+    v.select({ type: 'furniture', id: v.layer.furniture[0].id });
+    v.rotateSelected(90);
+  });
+  await page.click('#btn-undo');
+  check(
+    'Annuler ne déplace pas la vue',
+    Math.abs((await page.evaluate(() => window.planViewer.view.vp.scale)) - zoomBefore) < 1e-9,
   );
 
   // ── Persistance IndexedDB ─────────────────────────────────────────────

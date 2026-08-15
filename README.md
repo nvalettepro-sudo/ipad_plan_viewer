@@ -240,6 +240,8 @@ Dans la [console Google Cloud](https://console.cloud.google.com/) :
 | Glisser l'objet **déjà sélectionné** | Le déplacer (seul cas où un objet bouge) |
 | Pastille **✏️** de la barre du bas | Déplier / replier le panneau d'édition de l'objet |
 | **Mesurer** + 1 doigt | Tracer une cote ; l'axe (H ou V) est choisi selon le sens du geste |
+| **Annuler** ↩︎ | Défaire la dernière action, quelle qu'elle soit (⌘Z au clavier) |
+| Bascule **Cotes** | Masquer les dimensions du mobilier, en gardant les noms |
 | **Meuble** | Créer un rectangle aux dimensions réelles saisies |
 | **Échelle** | Choisir 1/N, ou calibrer sur une cote connue du plan |
 | **Export** | Générer le PDF annoté, puis *Partager* (feuille iOS) ou *Télécharger* |
@@ -257,6 +259,14 @@ l'écran, précisément au moment où l'on veut voir le plan qu'on vient de
 désigner. Une pastille ✏️ apparaît alors dans la barre du bas, à la place des
 informations du document, et le déplie à la demande. La replier ne
 désélectionne pas : l'objet reste manipulable au doigt.
+
+**Une cote va toujours d'un trait à l'autre.** L'axe du geste fixe la ligne de
+cote ; ses deux extrémités se posent ensuite sur les tracés que cette ligne
+rencontre, chacune sur le plus proche du doigt. La recherche s'élargit tant
+qu'aucun tracé n'est trouvé, de sorte qu'une extrémité ne reste jamais « en
+l'air ». Une extrémité déjà posée se reprend en tirant sa poignée : elle
+conserve l'axe et se raccroche à un autre trait. Décochez **Accrochage** pour
+retrouver un placement libre (indispensable sur un PDF scanné).
 
 **Accrochage** : actif si le PDF contient des tracés vectoriels (export direct
 depuis Archicad, AutoCAD…). Pendant une cote contrainte, l'accrochage cherche les

@@ -67,7 +67,8 @@ export function renderInspector(view, dom, onChange) {
     name.placeholder = 'Nom';
     name.maxLength = 40;
     name.addEventListener('input', () => {
-      view.updateSelected({ label: name.value });
+      // Clé de regroupement : toute la saisie d'un nom ne forme qu'une action.
+      view.updateSelected({ label: name.value }, `label:${object.id}`);
       dom.title.textContent = name.value || 'Meuble';
       onChange();
     });
@@ -171,6 +172,7 @@ export function renderInspector(view, dom, onChange) {
 
 /** Impose une longueur réelle à une cote en déplaçant son extrémité B. */
 function setMeasureLength(view, measure, targetMm) {
+  view.pushUndo(`length:${measure.id}`);
   const perMm = 1 / mmPerPt(view.scale);
   const lengthPt = targetMm * perMm;
   const axis = measure.axis || 'h';

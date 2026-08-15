@@ -115,6 +115,9 @@ async function boot() {
       syncToolButtons();
       openScaleDialog({ calibration: true });
     },
+    onUndoChange: (depth) => {
+      $('btn-undo').disabled = depth === 0;
+    },
     onVectorInfo: (count) => {
       state.vectorSegments = count;
       updateStatus();
@@ -319,6 +322,7 @@ function wireUi() {
     });
   }
   $('btn-add-furniture').addEventListener('click', () => openFurnitureDialog());
+  $('btn-undo').addEventListener('click', undoLastAction);
   $('btn-fit').addEventListener('click', () => view.fit());
   $('btn-scale').addEventListener('click', () => openScaleDialog());
   $('btn-export').addEventListener('click', () => exportPdf());
@@ -351,6 +355,14 @@ function wireUi() {
     $('update-banner').hidden = true;
   });
 
+  // Confort au clavier pendant le développement sur ordinateur.
+  window.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      undoLastAction();
+    }
+  });
+
   // Sauvegarde de sécurité quand l'app passe en arrière-plan (iOS peut la
   // suspendre puis la tuer sans autre évènement).
   document.addEventListener('visibilitychange', () => {
@@ -369,6 +381,17 @@ function wireUi() {
   wireMenuDialog();
   wireGoogleDialog();
   wireExportDialog();
+}
+
+/** Annule la dernière action, quelle qu'elle soit. */
+function undoLastAction() {
+  if (!view?.undo()) {
+    toast('Rien à annuler.');
+    return;
+  }
+  refreshInspector();
+  syncScaleUi();
+  autosave.schedule();
 }
 
 function syncToolButtons() {
@@ -621,6 +644,7 @@ async function openScaleDialog({ firstTime = false, calibration = false } = {}) 
     );
     return;
   }
+  view.pushUndo(); // l'échelle fait partie des actions annulables
   const layer = currentLayer();
   layer.scale = next;
   layer.scaleSet = true;
