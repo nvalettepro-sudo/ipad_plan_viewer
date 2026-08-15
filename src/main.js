@@ -344,20 +344,31 @@ function syncToolButtons() {
   }
 }
 
+/**
+ * La barre d'état ne parle que lorsqu'il y a quelque chose à dire.
+ *
+ * Afficher « Enregistrement… » puis « Enregistré » à chaque modification
+ * n'apprend rien — la sauvegarde automatique est censée être invisible — et
+ * ces deux textes de largeurs différentes décalaient les cases à cocher à
+ * chaque cycle. Ne restent que les états anormaux.
+ */
 function setSaveState(status) {
   const el = $('status-save');
+
   if (status === 'unavailable') {
     el.className = 'save-state warn-state';
     el.textContent = 'Session temporaire';
     return;
   }
-  // Le rappel « session temporaire » ne doit jamais être écrasé par un
-  // « Enregistré » mensonger.
-  if (!storageAvailable) return;
-  el.className = `save-state ${status === 'saved' ? 'saved' : status === 'saving' ? 'saving' : ''}`;
-  el.textContent =
-    status === 'saving' ? 'Enregistrement…' : status === 'saved' ? 'Enregistré' : status === 'error' ? 'Erreur' : '';
-  if (status === 'saved') setTimeout(() => (el.textContent = ''), 1800);
+  if (!storageAvailable) return; // le rappel permanent ne doit pas être écrasé
+
+  if (status === 'error') {
+    el.className = 'save-state error-state';
+    el.textContent = 'Échec de sauvegarde';
+    return;
+  }
+  el.className = 'save-state';
+  el.textContent = '';
 }
 
 function updateStatus() {
@@ -911,6 +922,7 @@ window.planViewer = {
   },
   openPlan,
   importPdf,
+  flushSave: () => autosave.flush(),
   buildExport: () =>
     buildAnnotatedPdf({ bytes: state.bytes.slice(0), layers: state.layers, name: state.plan.name }),
 };

@@ -144,7 +144,7 @@ export class PlanView {
     this.tool = tool;
     this.draft = null;
     this.activeSnap = null;
-    if (tool !== 'select') this.select(null);
+    if (tool !== 'pan') this.select(null);
     this.opts.onHud?.(tool === 'calibrate' ? 'Tracez le segment de référence' : null);
     this.#draw();
   }
@@ -243,7 +243,7 @@ export class PlanView {
     };
     this.layer.furniture.push(item);
     this.select({ type: 'furniture', id: item.id });
-    this.setTool('select');
+    this.setTool('pan');
     this.#changed();
     return item;
   }
@@ -302,11 +302,6 @@ export class PlanView {
     if (!this.page) return;
     const pdfPoint = this.vp.toPdf(p.x, p.y);
 
-    if (this.tool === 'pan') {
-      this.dragState = { kind: 'pan', last: p };
-      return;
-    }
-
     if (this.tool === 'measure' || this.tool === 'calibrate') {
       const snap = this.#snap(pdfPoint);
       this.activeSnap = snap;
@@ -319,15 +314,21 @@ export class PlanView {
       return;
     }
 
-    // Outil « sélection »
+    // Outil navigation : c'est aussi lui qui sert à sélectionner et à éditer.
+    //
+    // Règle, pensée pour le doigt : seul l'objet DÉJÀ sélectionné se déplace.
+    // Un glissement sur le plan, sur le vide comme sur un objet quelconque,
+    // navigue toujours — impossible de décaler une cote par mégarde en
+    // voulant simplement se déplacer dans le plan. La sélection, elle, se fait
+    // par un appui simple, sans glissement.
     const hit = this.#hitTest(p, pdfPoint);
-    if (hit) {
-      this.select({ type: hit.type, id: hit.id });
-      this.dragState = { kind: 'move', hit, last: pdfPoint, origin: pdfPoint, snapshot: hit.snapshot };
-    } else {
-      this.select(null);
-      this.dragState = { kind: 'pan', last: p };
+    const isSelected = hit && this.selection && hit.id === this.selection.id;
+
+    if (isSelected) {
+      this.dragState = { kind: 'move', hit, last: pdfPoint };
+      return;
     }
+    this.dragState = { kind: 'pan', last: p, tapHit: hit };
   }
 
   #onDragMove(p) {
@@ -371,10 +372,18 @@ export class PlanView {
       this.opts.onHud?.(null);
       if (moved) this.#changed();
       else this.#draw();
+      return;
     }
+
     if (state.kind === 'pan') {
-      this.#persistView();
-      this.#scheduleQuality();
+      if (moved) {
+        this.#persistView();
+        this.#scheduleQuality();
+        return;
+      }
+      // Appui simple : sélectionne ce qui se trouve sous le doigt, ou
+      // désélectionne si c'est le vide.
+      this.select(state.tapHit ? { type: state.tapHit.type, id: state.tapHit.id } : null);
     }
   }
 

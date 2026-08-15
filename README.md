@@ -235,12 +235,21 @@ Dans la [console Google Cloud](https://console.cloud.google.com/) :
 | --- | --- |
 | 2 doigts | Déplacer et zoomer, quel que soit l'outil actif |
 | Double-tap | Zoom avant, ou retour à l'ajustement écran si déjà zoomé |
-| **Naviguer** + 1 doigt | Déplacer le plan |
+| **Naviguer** + glisser | Déplacer le plan — y compris en partant d'un objet |
+| **Naviguer** + appui simple | Sélectionner l'objet sous le doigt ; le vide désélectionne |
+| Glisser l'objet **déjà sélectionné** | Le déplacer (seul cas où un objet bouge) |
 | **Mesurer** + 1 doigt | Tracer une cote ; l'axe (H ou V) est choisi selon le sens du geste |
-| **Sélection** + 1 doigt | Sélectionner, déplacer un meuble, tirer l'extrémité d'une cote |
 | **Meuble** | Créer un rectangle aux dimensions réelles saisies |
 | **Échelle** | Choisir 1/N, ou calibrer sur une cote connue du plan |
 | **Export** | Générer le PDF annoté, puis *Partager* (feuille iOS) ou *Télécharger* |
+
+**Sélection et déplacement** : un glissement navigue *toujours* dans le plan,
+même en partant d'un meuble ou d'une cote. Pour déplacer un objet, il faut
+d'abord le sélectionner d'un appui simple — il devient alors le seul à suivre le
+doigt. C'est ce qui évite de décaler une cote sans s'en apercevoir en voulant
+simplement se déplacer dans le plan. L'objet sélectionné ouvre un panneau
+d'édition : dimensions réelles, rotation 90°, couleur, nom, duplication,
+suppression ; pour une cote, sa longueur exacte.
 
 **Accrochage** : actif si le PDF contient des tracés vectoriels (export direct
 depuis Archicad, AutoCAD…). Pendant une cote contrainte, l'accrochage cherche les

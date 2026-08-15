@@ -147,11 +147,92 @@ try {
   const furniture = await page.evaluate(() => window.planViewer.view.layer.furniture);
   check('Meuble ajouté', furniture.length === 1 && furniture[0].lengthMm === 2000);
 
-  // ── Persistance IndexedDB ─────────────────────────────────────────────
-  // La sauvegarde est différée : on attend qu'elle soit effectivement écrite.
-  await page.waitForFunction(() => document.getElementById('status-save').textContent === 'Enregistré', null, {
-    timeout: 10_000,
+  // ── Sélection et déplacement au doigt ─────────────────────────────────
+  // Règle : un glissement navigue toujours ; seul l'objet déjà sélectionné
+  // se déplace. Impossible donc de décaler une cote en voulant se déplacer.
+  await page.click('#tool-pan');
+  // Départ propre : rien de sélectionné, et le meuble écarté de la cote —
+  // les deux se superposaient au centre, et une cote l'emporte volontairement
+  // sur un rectangle (sinon une cote posée dessus deviendrait insélectionnable).
+  await page.evaluate(() => {
+    const v = window.planViewer.view;
+    v.select(null);
+    Object.assign(v.layer.furniture[0], { cx: 250, cy: 200 });
+    v.refresh();
   });
+  const item = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const f = v.layer.furniture[0];
+    const p = v.vp.toScreen(f.cx, f.cy);
+    return { screen: p, cx: f.cx, cy: f.cy };
+  });
+  const canvasBox = await page.locator('#viewport-canvas').boundingBox();
+  const at = (o) => ({ x: canvasBox.x + o.x, y: canvasBox.y + o.y });
+
+  // 1. Glissement sur le meuble NON sélectionné : le plan navigue, le meuble
+  //    ne bouge pas d'un pouce.
+  const before = await page.evaluate(() => ({ ...window.planViewer.view.layer.furniture[0] }));
+  let from = at(item.screen);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 90, from.y + 40, { steps: 10 });
+  await page.mouse.up();
+  const afterPan = await page.evaluate(() => ({ ...window.planViewer.view.layer.furniture[0] }));
+  check(
+    'Glisser sur un objet non sélectionné navigue, sans le déplacer',
+    afterPan.cx === before.cx && afterPan.cy === before.cy,
+  );
+
+  // 2. Appui simple sur le meuble : il se sélectionne, l'inspecteur s'ouvre.
+  const now = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const f = v.layer.furniture[0];
+    return v.vp.toScreen(f.cx, f.cy);
+  });
+  from = at(now);
+  await page.mouse.click(from.x, from.y);
+  check(
+    'Appui simple : objet sélectionné, inspecteur ouvert',
+    (await page.evaluate(() => window.planViewer.view.selection?.type)) === 'furniture' &&
+      !(await page.locator('#inspector').isHidden()),
+  );
+
+  // 3. Glissement sur l'objet sélectionné : cette fois il se déplace.
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 60, from.y + 30, { steps: 10 });
+  await page.mouse.up();
+  const afterMove = await page.evaluate(() => ({ ...window.planViewer.view.layer.furniture[0] }));
+  check(
+    'Glisser l’objet sélectionné le déplace',
+    Math.abs(afterMove.cx - before.cx) > 1 || Math.abs(afterMove.cy - before.cy) > 1,
+  );
+
+  // 4. Rotation 90° et suppression depuis l'inspecteur.
+  await page.evaluate(() => window.planViewer.view.rotateSelected(90));
+  check('Rotation 90°', (await page.evaluate(() => window.planViewer.view.layer.furniture[0].rot)) === 90);
+  await page.evaluate(() => window.planViewer.view.updateSelected({ lengthMm: 1500 }));
+  check(
+    'Dimensions modifiables',
+    (await page.evaluate(() => window.planViewer.view.layer.furniture[0].lengthMm)) === 1500,
+  );
+
+  // 5. Appui dans le vide : désélection.
+  await page.mouse.click(canvasBox.x + 20, canvasBox.y + canvasBox.height - 20);
+  check(
+    'Appui dans le vide : désélection',
+    (await page.evaluate(() => window.planViewer.view.selection)) === null,
+  );
+
+  // On rétablit l'état attendu par la suite des vérifications.
+  await page.evaluate(() => {
+    const f = window.planViewer.view.layer.furniture[0];
+    f.rot = 0;
+    f.lengthMm = 2000;
+  });
+
+  // ── Persistance IndexedDB ─────────────────────────────────────────────
+  await page.evaluate(() => window.planViewer.flushSave());
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean(window.planViewer?.state.plan), null, { timeout: 20_000 });
   const restored = await page.evaluate(() => ({
@@ -310,7 +391,7 @@ try {
     document.querySelector('#status-doc .doc-meta').textContent = ' · page 1/3 · 6 128 tracés';
     record();
 
-    for (const text of ['Enregistrement…', 'Enregistré', '', 'Session temporaire']) {
+    for (const text of ['', 'Échec de sauvegarde', '', 'Session temporaire']) {
       save.textContent = text;
       await new Promise((r) => requestAnimationFrame(r));
       record();

@@ -41,11 +41,11 @@
         </div>
 
         <div class="toolbar-group tools" role="group" aria-label="Outils">
+          <!-- Un seul outil pour naviguer ET sélectionner : appui simple pour
+               sélectionner, glissement pour déplacer le plan, et glissement sur
+               l'objet déjà sélectionné pour le déplacer, lui. -->
           <button class="btn tool" id="tool-pan" data-tool="pan" type="button" aria-pressed="true">
             <span class="ico">✋</span><span class="lbl">Naviguer</span>
-          </button>
-          <button class="btn tool" id="tool-select" data-tool="select" type="button" aria-pressed="false">
-            <span class="ico">👆</span><span class="lbl">Sélection</span>
           </button>
           <button class="btn tool" id="tool-measure" data-tool="measure" type="button" aria-pressed="false">
             <span class="ico">📏</span><span class="lbl">Mesurer</span>
@@ -105,6 +105,7 @@
             <strong id="inspector-title">Objet</strong>
             <button class="icon-btn" id="inspector-close" type="button" aria-label="Fermer">✕</button>
           </div>
+          <p class="inspector-hint">Glissez l'objet sélectionné pour le déplacer.</p>
           <div class="inspector-body" id="inspector-body"></div>
         </aside>
       </main>
