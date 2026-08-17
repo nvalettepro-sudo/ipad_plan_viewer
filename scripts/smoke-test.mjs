@@ -24,14 +24,35 @@ function check(label, condition, detail = '') {
 }
 
 /**
- * Les commandes secondaires vivent dans le menu burger : il faut l'ouvrir avant
- * de cliquer, et attendre sa fermeture avant la vérification suivante.
+ * Le groupe d'outils n'est pas parfaitement centré dans la barre : ses deux
+ * ancres, ☰ et ↩︎, portent des libellés de longueurs différentes, et l'écart
+ * de largeur décale le groupe d'autant de moitiés. Mesuré à 5 px sur iPad,
+ * invisible à l'œil — cette tolérance dit ce qu'on accepte, sans laisser
+ * passer un vrai déséquilibre.
  */
-async function menuClick(page, selector) {
-  await page.click('#btn-menu');
-  await page.waitForFunction(() => document.getElementById('dlg-menu').open, null, { timeout: 5_000 });
-  await page.click(selector);
-  await page.waitForFunction(() => !document.getElementById('dlg-menu').open, null, { timeout: 5_000 });
+const TOOLBAR_CENTRE_TOLERANCE_PX = 8;
+
+/**
+ * Géométrie de la barre d'outils. Comparer les deux écarts autour du groupe ne
+ * prouverait rien : `margin: 0 auto` les rend égaux par construction, quelles
+ * que soient les largeurs. C'est au centre de la barre qu'il faut se mesurer.
+ */
+function toolbarGeometry(page) {
+  return page.evaluate(() => {
+    const box = (sel) => document.querySelector(sel).getBoundingClientRect();
+    const toolbar = box('#toolbar');
+    const tools = box('.toolbar-group.tools');
+    const tops = [...document.querySelectorAll('#toolbar .btn')].map((b) =>
+      Math.round(b.getBoundingClientRect().top),
+    );
+    return {
+      rows: new Set(tops).size,
+      height: Math.round(toolbar.height),
+      undoInToolbar: Boolean(document.getElementById('btn-undo').closest('#toolbar')),
+      undoAfterFurniture: box('#btn-undo').left >= box('#btn-add-furniture').right,
+      offset: tools.left + tools.width / 2 - (toolbar.left + toolbar.width / 2),
+    };
+  });
 }
 
 async function waitForServer(timeoutMs = 30_000) {
@@ -736,6 +757,20 @@ try {
   check('Grille masquée : pastille retirée', await page.locator('#btn-grid-step').isHidden());
 
   // ── Annulation ────────────────────────────────────────────────────────
+  // Le bouton vit dans la barre, à droite du mobilier : rangé dans le menu,
+  // corriger un geste raté demandait deux taps.
+  const barWide = await toolbarGeometry(page);
+  check(
+    'Annuler dans la barre, à droite du mobilier (grand écran)',
+    barWide.undoInToolbar && barWide.undoAfterFurniture && barWide.rows === 1,
+    `${barWide.rows} rangée(s), ${barWide.height} px`,
+  );
+  check(
+    'Grand écran : groupe d’outils centré dans la barre',
+    Math.abs(barWide.offset) <= TOOLBAR_CENTRE_TOLERANCE_PX,
+    `décalage ${barWide.offset.toFixed(1)} px (toléré ${TOOLBAR_CENTRE_TOLERANCE_PX})`,
+  );
+
   const undoStart = await page.evaluate(() => ({
     furniture: window.planViewer.view.layer.furniture.length,
     label: window.planViewer.view.layer.furniture[0].label,
@@ -1024,32 +1059,16 @@ try {
   // ── iPhone : barre d'outils sur une seule rangée + menu burger ────────
   // La barre tenait sur deux rangées et mangeait l'écran : les commandes
   // secondaires vivent désormais dans le menu.
-  const bar = await phonePage.evaluate(() => {
-    const toolbar = document.getElementById('toolbar');
-    const tops = [...toolbar.querySelectorAll('.btn')].map((b) => Math.round(b.getBoundingClientRect().top));
-    const rect = (id) => document.getElementById(id).getBoundingClientRect();
-    return {
-      rows: new Set(tops).size,
-      height: Math.round(toolbar.getBoundingClientRect().height),
-      undoInToolbar: Boolean(document.getElementById('btn-undo').closest('#toolbar')),
-      // Annuler est à droite du mobilier, et le groupe d'outils reste centré
-      // entre ses deux ancres.
-      undoAfterFurniture: rect('btn-undo').left >= rect('btn-add-furniture').right,
-      centred:
-        Math.abs(
-          rect('tool-pan').left - rect('btn-menu').right - (rect('btn-undo').left - rect('btn-add-furniture').right),
-        ) < 2,
-    };
-  });
+  const bar = await toolbarGeometry(phonePage);
   check(
     'iPhone : barre d’outils sur une seule rangée',
-    bar.rows === 1,
+    bar.rows === 1 && bar.undoInToolbar && bar.undoAfterFurniture,
     `${bar.rows} rangée(s), ${bar.height} px`,
   );
   check(
-    'Annuler dans la barre, à droite du mobilier, outils toujours centrés',
-    bar.undoInToolbar && bar.undoAfterFurniture && bar.centred,
-    `barre=${bar.undoInToolbar}, à droite=${bar.undoAfterFurniture}, centré=${bar.centred}`,
+    'iPhone : groupe d’outils centré dans la barre',
+    Math.abs(bar.offset) <= TOOLBAR_CENTRE_TOLERANCE_PX,
+    `décalage ${bar.offset.toFixed(1)} px (toléré ${TOOLBAR_CENTRE_TOLERANCE_PX})`,
   );
 
   await phonePage.click('#btn-menu');

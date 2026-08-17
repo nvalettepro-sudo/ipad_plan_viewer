@@ -240,8 +240,11 @@ encore sa calibration d'échelle.
 
 **Annuler ↩︎** fait exception et garde sa place, ancrée à droite : c'est la
 seule commande hors dessin qu'on utilise assez souvent pour que deux taps
-soient deux de trop. Ses deux ancres — ☰ à gauche, ↩︎ à droite — maintiennent
-le groupe d'outils centré.
+soient deux de trop. Les deux ancres — ☰ à gauche, ↩︎ à droite — encadrent le
+groupe d'outils et le tiennent au centre, à quelques pixels près : sur grand
+écran leurs libellés n'ont pas la même longueur, ce qui décale le groupe de
+5 px. Le test de fumée mesure ce décalage aux deux largeurs et le borne à
+8 px, plutôt que de prétendre à un centrage exact.
 
 | Geste / bouton | Effet |
 | --- | --- |
