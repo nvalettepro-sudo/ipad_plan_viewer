@@ -52,6 +52,14 @@
             <span class="ico">🛋️</span><span class="lbl">Meuble</span>
           </button>
         </div>
+
+        <!-- Annuler est la seule commande hors dessin assez fréquente pour
+             mériter sa place dans la barre : rangée dans le menu, corriger un
+             geste raté demandait deux taps. Ancrée à droite, elle fait pendant
+             au menu et laisse le groupe d'outils centré. -->
+        <button class="btn" id="btn-undo" type="button" title="Annuler la dernière action" disabled>
+          <span class="ico">↩︎</span><span class="lbl">Annuler</span>
+        </button>
       </header>
 
       <!-- ── Zone de rendu du plan ──────────────────────────────────────── -->
@@ -245,11 +253,6 @@
         </ul>
 
         <ul class="menu-list menu-group">
-          <li>
-            <button class="btn wide" type="button" id="btn-undo" disabled>
-              ↩︎ Annuler la dernière action
-            </button>
-          </li>
           <li><button class="btn wide" type="button" id="btn-fit">⤢ Ajuster à l'écran</button></li>
           <li>
             <button class="btn wide" type="button" id="btn-scale">

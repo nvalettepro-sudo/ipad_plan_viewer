@@ -100,9 +100,13 @@ textarea {
   margin: 0 auto;
 }
 
-/* Le bouton menu est ancré à gauche ; sa pastille signale une échelle non
-   confirmée, avertissement que portait le bouton Échelle avant son rangement. */
-#btn-menu {
+/* Menu à gauche, Annuler à droite : les deux ancres qui encadrent le groupe
+   d'outils et le maintiennent centré. `flex: none` empêche la barre de les
+   comprimer quand le nom du plan s'allonge.
+   La pastille du menu signale une échelle non confirmée, avertissement que
+   portait le bouton Échelle avant son rangement. */
+#btn-menu,
+#btn-undo {
   position: relative;
   flex: none;
 }

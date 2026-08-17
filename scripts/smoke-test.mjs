@@ -753,7 +753,7 @@ try {
     'Suppression effectuée',
     (await page.evaluate(() => window.planViewer.view.layer.furniture.length)) === undoStart.furniture - 1,
   );
-  await menuClick(page, '#btn-undo');
+  await page.click('#btn-undo');
   check(
     'Annuler restaure le meuble supprimé',
     (await page.evaluate(() => window.planViewer.view.layer.furniture.length)) === undoStart.furniture &&
@@ -767,7 +767,7 @@ try {
     v.rotateSelected(90);
   });
   const rotated = await page.evaluate(() => window.planViewer.view.layer.furniture[0].rot);
-  await menuClick(page, '#btn-undo');
+  await page.click('#btn-undo');
   check(
     'Annuler défait la rotation',
     rotated === 90 && (await page.evaluate(() => window.planViewer.view.layer.furniture[0].rot)) === 0,
@@ -783,7 +783,7 @@ try {
       v.updateSelected({ label: text }, `label:${id}`);
     }
   });
-  await menuClick(page, '#btn-undo');
+  await page.click('#btn-undo');
   check(
     'Annuler défait toute la saisie d’un nom, pas une lettre',
     (await page.evaluate(() => window.planViewer.view.layer.furniture[0].label)) === beforeTyping,
@@ -797,7 +797,7 @@ try {
     v.select({ type: 'furniture', id: v.layer.furniture[0].id });
     v.rotateSelected(90);
   });
-  await menuClick(page, '#btn-undo');
+  await page.click('#btn-undo');
   check(
     'Annuler ne déplace pas la vue',
     Math.abs((await page.evaluate(() => window.planViewer.view.vp.scale)) - zoomBefore) < 1e-9,
@@ -1027,18 +1027,35 @@ try {
   const bar = await phonePage.evaluate(() => {
     const toolbar = document.getElementById('toolbar');
     const tops = [...toolbar.querySelectorAll('.btn')].map((b) => Math.round(b.getBoundingClientRect().top));
-    return { rows: new Set(tops).size, height: Math.round(toolbar.getBoundingClientRect().height) };
+    const rect = (id) => document.getElementById(id).getBoundingClientRect();
+    return {
+      rows: new Set(tops).size,
+      height: Math.round(toolbar.getBoundingClientRect().height),
+      undoInToolbar: Boolean(document.getElementById('btn-undo').closest('#toolbar')),
+      // Annuler est à droite du mobilier, et le groupe d'outils reste centré
+      // entre ses deux ancres.
+      undoAfterFurniture: rect('btn-undo').left >= rect('btn-add-furniture').right,
+      centred:
+        Math.abs(
+          rect('tool-pan').left - rect('btn-menu').right - (rect('btn-undo').left - rect('btn-add-furniture').right),
+        ) < 2,
+    };
   });
   check(
     'iPhone : barre d’outils sur une seule rangée',
     bar.rows === 1,
     `${bar.rows} rangée(s), ${bar.height} px`,
   );
+  check(
+    'Annuler dans la barre, à droite du mobilier, outils toujours centrés',
+    bar.undoInToolbar && bar.undoAfterFurniture && bar.centred,
+    `barre=${bar.undoInToolbar}, à droite=${bar.undoAfterFurniture}, centré=${bar.centred}`,
+  );
 
   await phonePage.click('#btn-menu');
   await phonePage.waitForFunction(() => document.getElementById('dlg-menu').open, null, { timeout: 5_000 });
   const menuEntries = await phonePage.evaluate(() =>
-    ['btn-open', 'btn-drive', 'btn-undo', 'btn-fit', 'btn-scale', 'btn-export', 'menu-page', 'menu-clear']
+    ['btn-open', 'btn-drive', 'btn-fit', 'btn-scale', 'btn-export', 'menu-page', 'menu-clear']
       .filter((id) => {
         const el = document.getElementById(id);
         return el && el.closest('#dlg-menu') && el.getBoundingClientRect().height > 0;
@@ -1046,7 +1063,7 @@ try {
   );
   check(
     'iPhone : les commandes secondaires sont dans le menu',
-    menuEntries.length === 8,
+    menuEntries.length === 7,
     menuEntries.join(', '),
   );
 

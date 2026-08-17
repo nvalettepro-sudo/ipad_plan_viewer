@@ -233,10 +233,15 @@ Dans la [console Google Cloud](https://console.cloud.google.com/) :
 
 La barre du haut tient sur **une seule rangée** et ne garde que les trois
 outils de dessin — ✋ *Naviguer*, 📏 *Mesurer*, 🛋️ *Meuble*. Tout le reste
-(ouvrir, Drive, annuler, ajuster, échelle, export, pages, réglages) vit dans le
-**menu ☰**, à gauche. Sur téléphone la barre débordait sinon sur deux rangées,
-au détriment du plan. Une pastille orange sur le ☰ signale qu'une page attend
+(ouvrir, Drive, ajuster, échelle, export, pages, réglages) vit dans le **menu
+☰**, à gauche. Sur téléphone la barre débordait sinon sur deux rangées, au
+détriment du plan. Une pastille orange sur le ☰ signale qu'une page attend
 encore sa calibration d'échelle.
+
+**Annuler ↩︎** fait exception et garde sa place, ancrée à droite : c'est la
+seule commande hors dessin qu'on utilise assez souvent pour que deux taps
+soient deux de trop. Ses deux ancres — ☰ à gauche, ↩︎ à droite — maintiennent
+le groupe d'outils centré.
 
 | Geste / bouton | Effet |
 | --- | --- |
@@ -247,7 +252,7 @@ encore sa calibration d'échelle.
 | Glisser l'objet **déjà sélectionné** | Le déplacer (seul cas où un objet bouge) |
 | Pastille **✏️** de la barre du bas | Déplier / replier le panneau d'édition de l'objet |
 | **Mesurer** + 1 doigt | Tracer une cote ; l'axe (H ou V) est choisi selon le sens du geste. La cote posée, l'app revient à **Naviguer** |
-| ☰ → **Annuler** ↩︎ | Défaire la dernière action, quelle qu'elle soit (⌘Z au clavier) |
+| **Annuler** ↩︎ (barre du haut, à droite) | Défaire la dernière action, quelle qu'elle soit (⌘Z au clavier) |
 | Bascule **Cotes** | Masquer les dimensions du mobilier, en gardant les noms |
 | Bascule **Grille** + pastille **1 m / 50 cm** | Afficher le quadrillage et changer son pas |
 | Glisser le **point bleu** | Déplacer l'origine de la grille (s'accroche aux angles) |
