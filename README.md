@@ -15,7 +15,7 @@ entre les sessions.
 | Échelle **par page** + calibration sur une cote imprimée | ✅ |
 | Sélecteur de page à vignettes pour les PDF multi-pages | ✅ |
 | Mesure manuelle + grille magnétique (repli pour les PDF scannés) | ✅ |
-| Mobilier : rectangles cotés en dimensions réelles, rotation 90°, couleur, étiquette | ✅ |
+| Mobilier : rectangles cotés en dimensions réelles, rotation 90°, couleur, étiquette, **tasseaux** | ✅ |
 | Sauvegarde locale automatique (IndexedDB + stockage persistant) | ✅ |
 | Export PDF annoté (superposition sur le PDF d'origine, échelle native conservée) | ✅ |
 | Import depuis l'app **Fichiers** (iCloud, Drive, OneDrive, Dropbox, local) | ✅ |
@@ -265,6 +265,15 @@ l'écran, précisément au moment où l'on veut voir le plan qu'on vient de
 désigner. Une pastille ✏️ apparaît alors dans la barre du bas, à la place des
 informations du document, et le déplie à la demande. La replier ne
 désélectionne pas : l'objet reste manipulable au doigt.
+
+**Tasseaux.** Un rectangle peut figurer une ossature plutôt qu'un volume plein :
+cochez *Tasseaux* dans le volet d'édition, puis donnez la largeur d'une pièce et
+celle du vide entre deux — 3 cm et 3 cm pour un claustra courant. Les bandes se
+répartissent sur la longueur du rectangle et suivent sa rotation, comme le
+feraient de vraies pièces de bois ; la dernière est coupée net par le bord,
+puisqu'un tasseau ne dépasse pas du meuble. Le motif est reproduit à l'identique
+dans le PDF exporté. Trop dézoomé, il se confondrait en un aplat gris : le
+rectangle est alors rendu nu, même règle que pour les étiquettes.
 
 **Les étiquettes s'effacent au lieu de grossir.** Nom, dimensions et valeurs de
 cote gardent une taille constante à l'écran : c'est ce qu'on attend d'une

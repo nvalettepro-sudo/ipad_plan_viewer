@@ -11,6 +11,7 @@
 
 import { spawn } from 'node:child_process';
 import { PDFDocument } from 'pdf-lib';
+import { hatchBands } from '../src/core/geometry.js';
 import { launchBrowser } from './browser.mjs';
 import { makeTestPlan } from './make-test-plan.mjs';
 
@@ -352,6 +353,103 @@ try {
     exportSansCotes < exportAvecCotes,
     `${exportSansCotes} o sans cotes, ${exportAvecCotes} o avec`,
   );
+
+  // ── Tasseaux (hachures) ───────────────────────────────────────────────
+  // Un meuble de 2 m hachuré en plein 30 cm / vide 30 cm doit compter quatre
+  // bandes : 200 / 60 = 3,33 périodes, donc 4 tasseaux dont le dernier est
+  // coupé par le bord — une pièce de bois ne dépasse pas du meuble.
+  // `hatchBands` est du calcul pur : on le vérifie ici même, sans passer par
+  // le navigateur — le serveur de prévisualisation ne sert que le bundle.
+  const perMm = 1 / (25.4 / 72) / 50; // points PDF par millimètre, à 1/50
+  const rectW = 2000 * perMm;
+  const list = hatchBands(300, 420, rectW, 900 * perMm, 0, 300 * perMm, 300 * perMm);
+  const widthsMm = list.map((b) => Math.round((b.width / perMm) * 10) / 10);
+  check(
+    'Tasseaux : bandes réparties sur la longueur, la dernière coupée au bord',
+    list.length === 4 &&
+      widthsMm.slice(0, 3).every((w) => Math.abs(w - 300) < 1) &&
+      Math.abs(widthsMm[3] - 200) < 1 &&
+      list.every((b) => b.x >= 300 - rectW / 2 - 0.01 && b.x + b.width <= 300 + rectW / 2 + 0.01),
+    `${list.length} bandes de ${widthsMm.join(' / ')} mm`,
+  );
+  check(
+    'Tasseaux : motif trop dense pour être lisible, on renonce',
+    hatchBands(300, 420, rectW, 900 * perMm, 0, 0.001, 0.001).length === 0,
+  );
+
+  // Rendus à l'écran : on compte les pixels de la couleur du meuble sur une
+  // ligne traversant le rectangle. Sans hachures, la teinte est uniforme ;
+  // avec, elle alterne — c'est ce qu'on vérifie, pas un simple drapeau.
+  const alternance = await page.evaluate(async () => {
+    const v = window.planViewer.view;
+    const f = v.layer.furniture[0];
+    const original = { lengthMm: f.lengthMm, widthMm: f.widthMm };
+    // On agrandit le meuble plutôt que de zoomer : la ligne de scan doit passer
+    // à l'écart des étiquettes, qui occupent le centre du rectangle, et le
+    // meuble doit rester entièrement à l'écran.
+    Object.assign(f, { lengthMm: 6000, widthMm: 3000, rot: 0 });
+    v.fit();
+
+    const canvas = document.getElementById('viewport-canvas');
+    const ctx = canvas.getContext('2d');
+    const dpr = v.dpr || 1;
+    const perMm = 1 / (25.4 / 72) / v.layer.scale.ratio;
+    const halfW = v.vp.lengthToScreen((f.lengthMm * perMm) / 2);
+    const halfH = v.vp.lengthToScreen((f.widthMm * perMm) / 2);
+
+    // Le repaint passe par requestAnimationFrame : lire le canevas tout de
+    // suite renverrait l'image précédente.
+    const painted = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    const scan = async (hatch) => {
+      f.hatch = hatch;
+      v.refreshLayer();
+      await painted();
+      const c = v.vp.toScreen(f.cx, f.cy);
+      const { data } = ctx.getImageData(
+        Math.round((c.x - halfW + 4) * dpr),
+        Math.round((c.y - halfH * 0.5) * dpr), // au-dessus des étiquettes
+        Math.round((halfW * 2 - 8) * dpr),
+        1,
+      );
+      let changes = 0;
+      for (let i = 4; i < data.length; i += 4) {
+        if (Math.abs(data[i] - data[i - 4]) + Math.abs(data[i + 2] - data[i - 2]) > 12) changes++;
+      }
+      return changes;
+    };
+    const result = { sans: await scan(null), avec: await scan({ solidMm: 300, gapMm: 300 }) };
+    Object.assign(f, original);
+    v.refreshLayer();
+    return result;
+  });
+  check(
+    'Tasseaux : le rectangle alterne plein et vide à l’écran',
+    alternance.avec >= alternance.sans + 10,
+    `${alternance.sans} transition(s) sans hachures, ${alternance.avec} avec`,
+  );
+
+  // L'export doit les porter aussi : un PDF exporté avec tasseaux est plus
+  // lourd, puisqu'il contient un rectangle de plus par tasseau.
+  const exportSansHachures = await page.evaluate(async () => {
+    window.planViewer.view.layer.furniture[0].hatch = null;
+    const blob = await window.planViewer.buildExport();
+    return (await blob.arrayBuffer()).byteLength;
+  });
+  const exportAvecHachures = await page.evaluate(async () => {
+    window.planViewer.view.layer.furniture[0].hatch = { solidMm: 300, gapMm: 300 };
+    const blob = await window.planViewer.buildExport();
+    return (await blob.arrayBuffer()).byteLength;
+  });
+  check(
+    'Tasseaux : l’export PDF les reproduit',
+    exportAvecHachures > exportSansHachures,
+    `${exportSansHachures} o sans, ${exportAvecHachures} o avec`,
+  );
+  await page.evaluate(() => {
+    window.planViewer.view.layer.furniture[0].hatch = null;
+    window.planViewer.view.refreshLayer();
+  });
 
   // ── Étiquettes qui débordent : elles disparaissent ────────────────────
   // Les étiquettes gardent une taille fixe à l'écran. En dézoomant elles

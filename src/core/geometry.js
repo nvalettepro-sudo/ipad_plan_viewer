@@ -88,3 +88,47 @@ export function pointInRect(p, cx, cy, w, h, rotDeg, pad = 0) {
 export function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
+
+/**
+ * Bandes de hachures d'un rectangle orienté, en coordonnées PDF.
+ *
+ * Sert à figurer une ossature — des tasseaux de 3 cm espacés de 3 cm, par
+ * exemple. Les bandes courent le long de la **largeur** du rectangle et se
+ * répètent sur sa **longueur** : elles suivent donc sa rotation, comme le
+ * feraient de vraies pièces de bois.
+ *
+ * Chaque bande est décrite par son coin d'origine et les deux vecteurs
+ * unitaires du repère local, ce qui laisse l'appelant la tracer comme il veut :
+ * un quadrilatère sur le canevas, un rectangle pivoté dans le PDF exporté.
+ *
+ * @param {number} solidPt largeur d'un tasseau
+ * @param {number} gapPt   vide entre deux tasseaux
+ * @param {number} maxBands garde-fou : au-delà, le motif serait illisible et
+ *   coûteux à tracer, on renonce plutôt que de figer l'affichage.
+ */
+export function hatchBands(cx, cy, w, h, rotDeg, solidPt, gapPt, maxBands = 400) {
+  const period = solidPt + gapPt;
+  if (!(solidPt > 0) || !(period > 0) || !(w > 0) || !(h > 0)) return [];
+  if (w / period > maxBands) return [];
+
+  const [origin, right, , top] = rectCorners(cx, cy, w, h, rotDeg);
+  const ux = { x: (right.x - origin.x) / w, y: (right.y - origin.y) / w };
+  const uy = { x: (top.x - origin.x) / h, y: (top.y - origin.y) / h };
+
+  const bands = [];
+  for (let start = 0; start < w - 1e-9; start += period) {
+    // Le dernier tasseau est coupé net par le bord : une pièce de bois ne
+    // dépasse pas du meuble.
+    const width = Math.min(start + solidPt, w) - start;
+    if (width <= 1e-9) continue;
+    bands.push({
+      x: origin.x + ux.x * start,
+      y: origin.y + ux.y * start,
+      width,
+      height: h,
+      ux,
+      uy,
+    });
+  }
+  return bands;
+}

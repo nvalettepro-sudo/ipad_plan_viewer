@@ -7,7 +7,7 @@
  */
 
 import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
-import { rectCorners } from '../core/geometry.js';
+import { hatchBands, rectCorners } from '../core/geometry.js';
 import { formatLength, mmPerPt } from '../core/units.js';
 
 const MEASURE_RGB = [0.84, 0.16, 0.16];
@@ -117,6 +117,31 @@ function drawLayerOnPage(page, layer, { font, unit, showDimensions = true }) {
       borderWidth: 1,
       borderOpacity: 1,
     });
+
+    // Tasseaux : chaque bande est un rectangle pivoté du même angle que le
+    // meuble. `drawRectangle` pivote autour de (x, y), c'est-à-dire le coin
+    // que `hatchBands` fournit — les deux conventions coïncident.
+    if (item.hatch) {
+      for (const band of hatchBands(
+        item.cx,
+        item.cy,
+        w,
+        h,
+        item.rot,
+        item.hatch.solidMm * perMm,
+        item.hatch.gapMm * perMm,
+      )) {
+        page.drawRectangle({
+          x: band.x,
+          y: band.y,
+          width: band.width,
+          height: band.height,
+          rotate: degrees(item.rot),
+          color: toRgb(color),
+          opacity: 0.35,
+        });
+      }
+    }
 
     const dims = `${formatLength(item.lengthMm, unit)} x ${formatLength(item.widthMm, unit)}`;
     if (item.label && showDimensions) {

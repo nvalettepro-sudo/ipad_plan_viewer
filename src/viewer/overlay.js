@@ -7,7 +7,7 @@
  * attendu d'une annotation.
  */
 
-import { rectCorners } from '../core/geometry.js';
+import { hatchBands, rectCorners } from '../core/geometry.js';
 import { formatLength, mmPerPt } from '../core/units.js';
 
 export const MEASURE_COLOR = '#d62828';
@@ -30,6 +30,13 @@ const SMALL_FONT = "500 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', Robo
 /** Hauteur fixe d'une pastille d'étiquette, en pixels écran. */
 const LABEL_H = 20;
 const LABEL_PAD_X = 6;
+
+/**
+ * En deçà de ce pas à l'écran, les tasseaux se confondent en un aplat gris :
+ * on rend alors le rectangle nu. Même principe que pour les étiquettes — ne
+ * pas dessiner ce qui ne se lit plus.
+ */
+const MIN_HATCH_PITCH_PX = 2.5;
 
 /**
  * Encombrement horizontal d'une étiquette, sans la dessiner.
@@ -176,6 +183,10 @@ export function drawFurniture(ctx, vp, item, { scale, unit, selected = false, sh
 
   ctx.fillStyle = hexToRgba(item.color, 0.28);
   ctx.fill();
+
+  // Tasseaux : tracés sous la bordure, pour que celle-ci reste franche.
+  if (item.hatch) drawHatch(ctx, vp, item, w, h);
+
   ctx.strokeStyle = selected ? SELECT_COLOR : item.color;
   ctx.lineWidth = selected ? 3 : 2;
   ctx.stroke();
@@ -216,6 +227,40 @@ export function drawFurniture(ctx, vp, item, { scale, unit, selected = false, sh
       ctx.fill();
       ctx.stroke();
     }
+  }
+  ctx.restore();
+}
+
+/**
+ * Tasseaux : bandes pleines réparties sur la longueur du rectangle.
+ * Les quatre coins de chaque bande sont projetés séparément, si bien que la
+ * rotation du meuble comme celle de la page sont prises en compte sans cas
+ * particulier.
+ */
+function drawHatch(ctx, vp, item, w, h) {
+  const ptPerMm = w / item.lengthMm;
+  const solid = item.hatch.solidMm * ptPerMm;
+  const gap = item.hatch.gapMm * ptPerMm;
+  if (vp.lengthToScreen(solid + gap) < MIN_HATCH_PITCH_PX) return;
+
+  const bands = hatchBands(item.cx, item.cy, w, h, item.rot, solid, gap);
+  if (!bands.length) return;
+
+  ctx.save();
+  ctx.clip(); // le chemin courant est encore celui du rectangle
+  ctx.fillStyle = hexToRgba(item.color, 0.55);
+  for (const b of bands) {
+    const pts = [
+      [0, 0],
+      [b.width, 0],
+      [b.width, b.height],
+      [0, b.height],
+    ].map(([u, v]) => vp.toScreen(b.x + b.ux.x * u + b.uy.x * v, b.y + b.ux.y * u + b.uy.y * v));
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+    ctx.fill();
   }
   ctx.restore();
 }

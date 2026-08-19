@@ -95,6 +95,45 @@ export function renderInspector(view, dom, onChange) {
       ),
     );
 
+    // ── Tasseaux ────────────────────────────────────────────────────────
+    // Les deux champs restent affichés en permanence, simplement désactivés :
+    // les faire apparaître au décochage reconstruirait le volet, ce qui
+    // arracherait le champ « Nom » et refermerait le clavier sur iPhone.
+    const hatch = object.hatch || { solidMm: 30, gapMm: 30 };
+    // Relu à chaque validation : l'objet capturé à la construction du volet
+    // porterait les anciennes valeurs si l'autre champ a été modifié entretemps.
+    const currentHatch = () => view.getSelected()?.hatch || hatch;
+    const toggle = document.createElement('input');
+    toggle.type = 'checkbox';
+    toggle.checked = Boolean(object.hatch);
+
+    const solid = numberInput(fromMm(hatch.solidMm, unit), (v) => {
+      view.updateSelected({ hatch: { ...currentHatch(), solidMm: toMm(v, unit) } });
+      onChange();
+    });
+    const gap = numberInput(fromMm(hatch.gapMm, unit), (v) => {
+      view.updateSelected({ hatch: { ...currentHatch(), gapMm: toMm(v, unit) } });
+      onChange();
+    });
+    const syncHatchInputs = () => {
+      solid.disabled = !toggle.checked;
+      gap.disabled = !toggle.checked;
+    };
+    toggle.addEventListener('change', () => {
+      view.updateSelected({
+        hatch: toggle.checked
+          ? { solidMm: toMm(Number(solid.value), unit), gapMm: toMm(Number(gap.value), unit) }
+          : null,
+      });
+      syncHatchInputs();
+      onChange();
+    });
+    syncHatchInputs();
+
+    dom.body.append(row('Tasseaux', toggle));
+    dom.body.append(row(`Plein (${unit})`, solid));
+    dom.body.append(row(`Vide (${unit})`, gap));
+
     const swatches = document.createElement('div');
     swatches.className = 'swatches';
     for (const color of FURNITURE_COLORS) {
@@ -128,6 +167,7 @@ export function renderInspector(view, dom, onChange) {
           lengthMm: object.lengthMm,
           widthMm: object.widthMm,
           color: object.color,
+          hatch: object.hatch,
         });
         onChange();
       }),
@@ -173,6 +213,9 @@ export function renderInspector(view, dom, onChange) {
 /** Impose une longueur réelle à une cote en déplaçant son extrémité B. */
 function setMeasureLength(view, measure, targetMm) {
   view.pushUndo(`length:${measure.id}`);
+  // Imposer une longueur, c'est décider de la position de B : l'ancre qu'il
+  // portait le ramènerait aussitôt sur son arête.
+  if (measure.attach) measure.attach = { ...measure.attach, b: null };
   const perMm = 1 / mmPerPt(view.scale);
   const lengthPt = targetMm * perMm;
   const axis = measure.axis || 'h';

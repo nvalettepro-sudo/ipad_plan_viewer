@@ -345,7 +345,7 @@ export class PlanView {
   // ── Annotations ─────────────────────────────────────────────────────────
 
   /** Ajoute un meuble au centre de la vue. */
-  addFurniture({ label = '', lengthMm, widthMm, color = FURNITURE_COLORS[0] }) {
+  addFurniture({ label = '', lengthMm, widthMm, color = FURNITURE_COLORS[0], hatch = null }) {
     if (!this.layers) return null;
     this.pushUndo();
     const center = this.vp.toPdf(this.vp.width / 2, this.vp.height / 2);
@@ -356,6 +356,9 @@ export class PlanView {
       lengthMm,
       widthMm,
       color,
+      // Tasseaux : `null` tant que l'ossature n'est pas demandée, pour ne pas
+      // alourdir chaque meuble d'un réglage inutilisé.
+      hatch: hatch ? { ...hatch } : null,
       cx: center.x,
       cy: center.y,
       rot: 0,
