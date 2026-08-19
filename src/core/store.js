@@ -4,7 +4,7 @@ import { uid } from './geometry.js';
 import { idb } from './idb.js';
 import { defaultScale } from './units.js';
 
-export const LAYERS_VERSION = 2;
+export const LAYERS_VERSION = 3;
 
 /**
  * Calque vierge d'une page.
@@ -25,10 +25,29 @@ export function emptyLayers(planId, pageIndex = 0) {
     planId,
     version: LAYERS_VERSION,
     pageIndex,
+    // Pages ouvertes en onglets. Travailler sur un plan et sa coupe suppose de
+    // passer de l'un à l'autre sans les rouvrir à chaque fois.
+    openPages: [pageIndex],
     unit: 'auto',
     pages: { [pageIndex]: emptyPageLayer() },
     updatedAt: Date.now(),
   };
+}
+
+/**
+ * Liste des pages ouvertes, normalisée : entiers uniques, triés, contenant
+ * toujours la page active. Les calques enregistrés avant les onglets n'ont pas
+ * ce champ, et une liste corrompue ne doit pas priver l'utilisateur de son
+ * travail — on la reconstruit plutôt que de la rejeter.
+ */
+export function openPages(layers) {
+  const active = layers.pageIndex ?? 0;
+  const raw = Array.isArray(layers.openPages) ? layers.openPages : [];
+  const clean = [...new Set(raw.filter((i) => Number.isInteger(i) && i >= 0))].sort((a, b) => a - b);
+  if (!clean.includes(active)) clean.push(active);
+  clean.sort((a, b) => a - b);
+  layers.openPages = clean;
+  return clean;
 }
 
 /**
@@ -48,7 +67,18 @@ export function pageLayer(layers, index) {
 /** Migre un calque enregistré par une version antérieure. */
 function migrateLayers(layers, planId) {
   if (!layers) return emptyLayers(planId);
-  if (layers.version === LAYERS_VERSION && layers.pages) return layers;
+
+  // v2 → v3 : les onglets. Le seul manque est la liste des pages ouvertes,
+  // que `openPages()` reconstruit à partir de la page active.
+  if (layers.version === 2 && layers.pages) {
+    layers.version = LAYERS_VERSION;
+    openPages(layers);
+    return layers;
+  }
+  if (layers.version === LAYERS_VERSION && layers.pages) {
+    openPages(layers);
+    return layers;
+  }
 
   // v1 : une seule échelle et une seule liste d'annotations pour tout le document.
   const index = layers.pageIndex ?? 0;
@@ -56,6 +86,7 @@ function migrateLayers(layers, planId) {
     planId,
     version: LAYERS_VERSION,
     pageIndex: index,
+    openPages: [index],
     unit: layers.unit || 'auto',
     pages: {
       [index]: {

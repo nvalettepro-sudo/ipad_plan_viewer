@@ -973,3 +973,71 @@ select {
     display: inline;
   }
 }
+
+/* ── Onglets de pages ──────────────────────────────────────────────────────
+   Ouvrir un plan et sa coupe côte à côte suppose de passer de l'un à l'autre
+   sans les rouvrir. La barre défile horizontalement plutôt que de passer à la
+   ligne : sa hauteur doit rester constante, comme celle de la barre d'état. */
+.tabs {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+  flex: none;
+  height: 40px;
+  padding: 0 calc(var(--safe-right) + 12px) 0 calc(var(--safe-left) + 12px);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  z-index: 15;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin: 5px 0;
+  padding: 0 6px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #232c38;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.tab[aria-current='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #08111d;
+  font-weight: 600;
+}
+
+/* Cible tactile pleine hauteur : fermer un onglet par erreur en voulant en
+   changer est le défaut classique de ce motif. */
+.tab .close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  align-self: stretch;
+  margin-left: 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  opacity: 0.65;
+}
+
+.tab .close:active {
+  background: rgba(0, 0, 0, 0.18);
+  opacity: 1;
+}

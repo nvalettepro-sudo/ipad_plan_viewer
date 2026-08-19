@@ -11,6 +11,7 @@ import {
   deletePlan,
   listPlans,
   loadPlan,
+  openPages,
   pageLayer,
   saveLayers,
 } from './core/store.js';
@@ -212,6 +213,7 @@ async function openPlan(id) {
 
   $('empty-state').hidden = true;
   await setSetting('lastPlanId', id);
+  renderTabs();
   syncToolButtons();
   syncScaleUi();
   syncGridUi();
@@ -301,6 +303,20 @@ function wireUi() {
   // n'ouvre le sélecteur que depuis un tap non interrompu.
   $('dlg-menu').addEventListener('click', (e) => {
     if (e.target.closest('.menu-list button')) $('dlg-menu').close();
+  });
+
+  // Délégation : les onglets sont reconstruits à chaque changement de page,
+  // un écouteur par onglet serait à recâbler à chaque fois.
+  $('tabs').addEventListener('click', (e) => {
+    const closer = e.target.closest('[data-close]');
+    if (closer) {
+      closeTab(Number(closer.dataset.close));
+      return;
+    }
+    const tab = e.target.closest('.tab');
+    if (!tab) return;
+    const index = Number(tab.dataset.page);
+    if (index !== state.layers?.pageIndex) showPage(index);
   });
 
   $('chk-snap').addEventListener('change', (e) => view.setSnapEnabled(e.target.checked));
@@ -880,12 +896,74 @@ function describePage(index) {
   return parts.join(' · ');
 }
 
-/** Change de page depuis le menu, puis réclame l'échelle si elle est inconnue. */
+/** Ouvre une page depuis le menu, dans un onglet, puis réclame son échelle. */
 async function openPageDialog() {
   if (!state.pdf) return;
   const index = await openPagePicker(state.pdf, { context: 'switch' });
   if (index === null || index === state.layers.pageIndex) return;
   await showPage(index);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Onglets de pages
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Barre d'onglets. Elle ne s'affiche qu'à partir de deux pages ouvertes : sur
+ * téléphone, une rangée prise au plan pour un onglet unique serait du gâchis.
+ */
+function renderTabs() {
+  const bar = $('tabs');
+  if (!state.layers || !state.pdf) {
+    bar.hidden = true;
+    return;
+  }
+  const pages = openPages(state.layers);
+  bar.hidden = pages.length < 2;
+  if (bar.hidden) {
+    bar.replaceChildren();
+    return;
+  }
+
+  const active = state.layers.pageIndex ?? 0;
+  bar.replaceChildren(
+    ...pages.map((index) => {
+      const tab = document.createElement('button');
+      tab.type = 'button';
+      tab.className = 'tab';
+      tab.dataset.page = String(index);
+      tab.setAttribute('aria-current', String(index === active));
+
+      const label = document.createElement('span');
+      label.textContent = `Page ${index + 1}`;
+      tab.append(label);
+
+      const close = document.createElement('span');
+      close.className = 'close';
+      close.textContent = '✕';
+      close.dataset.close = String(index);
+      close.setAttribute('aria-hidden', 'true');
+      tab.append(close);
+
+      return tab;
+    }),
+  );
+}
+
+/**
+ * Ferme un onglet. La page garde ses annotations : fermer un onglet range une
+ * page, ça ne détruit rien — c'est « Effacer les annotations » qui détruit.
+ */
+async function closeTab(index) {
+  const pages = openPages(state.layers);
+  if (pages.length < 2) return; // le dernier onglet ne se ferme pas
+  state.layers.openPages = pages.filter((i) => i !== index);
+  if (index === state.layers.pageIndex) {
+    await showPage(state.layers.openPages[0]);
+  } else {
+    renderTabs();
+    autosave.schedule();
+  }
 }
 
 /** Affiche une page et demande son échelle si elle n'a jamais été confirmée. */
@@ -894,8 +972,12 @@ async function showPage(index) {
   state.vectorSegments = null;
   setBusy(`Ouverture de la page ${index + 1}…`);
   await view.setPage(index, { restoreView: true });
+  // `setPage` a mis à jour `pageIndex` ; `openPages` inscrit la page dans les
+  // onglets si elle n'y était pas encore.
+  openPages(state.layers);
   await saveLayers(state.layers);
   setBusy(null);
+  renderTabs();
   syncScaleUi();
   syncGridUi();
   updateStatus();
@@ -989,6 +1071,7 @@ window.planViewer = {
   openPlan,
   importPdf,
   flushSave: () => autosave.flush(),
+  renderTabs,
   buildExport: () =>
     buildAnnotatedPdf({
       bytes: state.bytes.slice(0),

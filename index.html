@@ -62,6 +62,11 @@
         </button>
       </header>
 
+      <!-- ── Onglets de pages ───────────────────────────────────────────────
+           Masqués tant qu'une seule page est ouverte : sur téléphone, chaque
+           rangée prise au plan se paie cher. -->
+      <nav class="tabs" id="tabs" hidden aria-label="Pages ouvertes"></nav>
+
       <!-- ── Zone de rendu du plan ──────────────────────────────────────── -->
       <main class="stage" id="stage">
         <canvas id="viewport-canvas"></canvas>
@@ -266,7 +271,7 @@
 
         <ul class="menu-list menu-group">
           <li><button class="btn wide" type="button" id="menu-library">🗂 Mes plans</button></li>
-          <li><button class="btn wide" type="button" id="menu-page">📄 Changer de page…</button></li>
+          <li><button class="btn wide" type="button" id="menu-page">📄 Ouvrir une page…</button></li>
           <li><button class="btn wide" type="button" id="menu-clear">🧹 Effacer toutes les annotations</button></li>
           <li><button class="btn wide" type="button" id="menu-storage">💾 État du stockage</button></li>
           <li><button class="btn wide" type="button" id="menu-install">📲 Installer sur l'écran d'accueil</button></li>

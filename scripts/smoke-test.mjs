@@ -56,6 +56,23 @@ function toolbarGeometry(page) {
   });
 }
 
+/** Ouvre une page dans un nouvel onglet, par le menu et le sélecteur à vignettes. */
+async function menuOpenPage(page, index) {
+  await page.click('#btn-menu');
+  await page.waitForFunction(() => document.getElementById('dlg-menu').open, null, { timeout: 5_000 });
+  await page.click('#menu-page');
+  await page.waitForFunction(() => document.getElementById('dlg-page').open, null, { timeout: 10_000 });
+  await page.locator('#page-grid .page-card').nth(index).click();
+  // `setPage` fixe `pageIndex` dès son entrée, bien avant d'avoir rendu la page
+  // et les onglets : s'y fier seul serait une course. Le voile d'attente ne se
+  // lève qu'au bout du parcours.
+  await page.waitForFunction(
+    (i) => window.planViewer.state.layers.pageIndex === i && document.getElementById('busy').hidden,
+    index,
+    { timeout: 20_000 },
+  );
+}
+
 async function waitForServer(timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -1060,6 +1077,80 @@ try {
     'Page 1 : calque et échelle intacts',
     pageOne.measures === 1 && pageOne.furniture === 1 && pageOne.ratio === 50,
     JSON.stringify(pageOne),
+  );
+
+  // ── Onglets : un plan et sa coupe ouverts en même temps ───────────────
+  // Un onglet unique ne mérite pas sa rangée à l'écran.
+  // On repart d'une seule page ouverte : les vérifications précédentes ont
+  // changé de page par `setPage` directement, ce qui ne passe pas par les
+  // onglets mais laisse quand même une trace au prochain rendu.
+  await page.evaluate(() => {
+    window.planViewer.state.layers.openPages = [window.planViewer.state.layers.pageIndex];
+    window.planViewer.renderTabs();
+  });
+  check(
+    'Une seule page ouverte : pas de barre d’onglets',
+    await page.locator('#tabs').isHidden(),
+  );
+
+  await menuOpenPage(page, 1);
+  const twoTabs = await page.evaluate(() => ({
+    labels: [...document.querySelectorAll('#tabs .tab')].map((t) => t.textContent.replace('✕', '').trim()),
+    current: document.querySelector('#tabs .tab[aria-current="true"]')?.dataset.page,
+    active: window.planViewer.state.layers.pageIndex,
+  }));
+  check(
+    'Deuxième page ouverte : deux onglets, le nouveau actif',
+    twoTabs.labels.length === 2 && twoTabs.current === '1' && twoTabs.active === 1,
+    JSON.stringify(twoTabs),
+  );
+
+  // Le va-et-vient entre onglets ne doit rien perdre : c'est tout l'intérêt.
+  await page.click('#tabs .tab[data-page="0"]');
+  await page.waitForFunction(() => window.planViewer.state.layers.pageIndex === 0, null, { timeout: 20_000 });
+  const backAndForth = await page.evaluate(() => ({
+    measures: window.planViewer.view.layer.measures.length,
+    furniture: window.planViewer.view.layer.furniture.length,
+    ratio: window.planViewer.view.layer.scale.ratio,
+  }));
+  check(
+    'Retour sur l’onglet précédent : travail intact',
+    backAndForth.measures === 1 && backAndForth.furniture === 1 && backAndForth.ratio === 50,
+    JSON.stringify(backAndForth),
+  );
+
+  // Fermer un onglet range la page, ça ne détruit pas ses annotations.
+  await page.click('#tabs .tab[data-page="1"] .close');
+  await page.waitForFunction(
+    () => document.querySelectorAll('#tabs .tab').length === 0,
+    null,
+    { timeout: 10_000 },
+  );
+  const afterClose = await page.evaluate(() => ({
+    hidden: document.getElementById('tabs').hidden,
+    open: [...window.planViewer.state.layers.openPages],
+    keptFurniture: window.planViewer.state.layers.pages['1'].furniture.length,
+  }));
+  check(
+    'Onglet fermé : barre masquée, annotations de la page conservées',
+    afterClose.hidden && afterClose.open.length === 1 && afterClose.keptFurniture === 1,
+    JSON.stringify(afterClose),
+  );
+
+  // Les onglets ouverts doivent survivre à la fermeture de l'app : rouvrir un
+  // plan et sa coupe à chaque démarrage annulerait le bénéfice.
+  await menuOpenPage(page, 1);
+  await page.evaluate(() => window.planViewer.flushSave());
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForFunction(() => Boolean(window.planViewer?.state.plan), null, { timeout: 20_000 });
+  const restoredTabs = await page.evaluate(() => ({
+    open: [...window.planViewer.state.layers.openPages],
+    tabs: document.querySelectorAll('#tabs .tab').length,
+  }));
+  check(
+    'Onglets restaurés au redémarrage',
+    restoredTabs.open.length === 2 && restoredTabs.tabs === 2,
+    JSON.stringify(restoredTabs),
   );
 
   // ── Export PDF annoté ─────────────────────────────────────────────────

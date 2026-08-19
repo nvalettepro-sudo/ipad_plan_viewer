@@ -13,7 +13,7 @@ entre les sessions.
 | Navigation : pincer / pan 2 doigts / double-tap / ajustement écran / mini-carte | ✅ |
 | Mesures contraintes H ou V, avec accrochage sur les tracés du PDF | ✅ |
 | Échelle **par page** + calibration sur une cote imprimée | ✅ |
-| Sélecteur de page à vignettes pour les PDF multi-pages | ✅ |
+| Sélecteur de page à vignettes + **onglets** : plusieurs pages ouvertes à la fois | ✅ |
 | Mesure manuelle + grille magnétique (repli pour les PDF scannés) | ✅ |
 | Mobilier : rectangles cotés en dimensions réelles, rotation 90°, couleur, étiquette, **tasseaux** | ✅ |
 | Sauvegarde locale automatique (IndexedDB + stockage persistant) | ✅ |
@@ -353,6 +353,18 @@ depuis Archicad, AutoCAD…). Pendant une cote contrainte, l'accrochage cherche 
 intersections entre la ligne de cote et les tracés du plan — on obtient donc la
 distance exacte de mur à mur. Si le PDF est un scan, l'app le détecte à l'import,
 signale l'absence de tracés et active la grille magnétique.
+
+**Onglets.** Plusieurs pages du même PDF peuvent rester ouvertes en même
+temps — le plan et sa coupe, typiquement. ☰ → *Ouvrir une page…* ajoute un
+onglet ; la barre d'onglets n'apparaît qu'à partir de deux, une rangée prise au
+plan pour un onglet unique serait du gâchis.
+
+Passer d'un onglet à l'autre ne perd rien : chaque page garde ses annotations,
+son échelle, et jusqu'à son cadrage — vous retrouvez la coupe là où vous
+l'aviez laissée. Les onglets ouverts sont enregistrés, donc restaurés au
+démarrage suivant. Fermer un onglet range la page, ça ne détruit pas son
+travail : rouvrez-la et tout est là. Le dernier onglet ne se ferme pas, faute
+de quoi il n'y aurait plus rien à afficher.
 
 **Documents multi-pages** : à l'import, l'app affiche les pages en vignettes et
 demande laquelle ouvrir — un numéro de page ne dit rien sur un carnet, il faut
