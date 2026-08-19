@@ -424,6 +424,14 @@ export class PlanView {
     this.#draw();
   }
 
+  /**
+   * À appeler après une modification du calque faite hors des méthodes de la
+   * vue : recale les cotes ancrées, repeint et déclenche la sauvegarde.
+   */
+  refreshLayer() {
+    this.#changed();
+  }
+
   // ── Gestes ──────────────────────────────────────────────────────────────
 
   #onDragStart(p) {
@@ -633,10 +641,12 @@ export class PlanView {
 
     const startSnap = this.#snapOnAxis(origin, axis, origin) || this.#snapGrid(onLine(origin), axis);
     draft.a = startSnap ? { x: startSnap.x, y: startSnap.y } : onLine(origin);
+    draft.attachA = startSnap?.attach || null;
 
     const endSnap = this.#snapOnAxis(origin, axis, pdfPoint) || this.#snapGrid(onLine(pdfPoint), axis);
     this.activeSnap = endSnap;
     draft.b = endSnap ? { x: endSnap.x, y: endSnap.y } : onLine(pdfPoint);
+    draft.attachB = endSnap?.attach || null;
 
     const lengthMm = dist(draft.a, draft.b) * mmPerPt(this.scale);
     this.opts.onHud?.(`${axis === 'h' ? '↔' : '↕'} ${formatLength(lengthMm, this.unit)}`);
@@ -672,6 +682,9 @@ export class PlanView {
       a: draft.a,
       b: draft.b,
       axis: draft.axis || 'h',
+      // Extrémités posées sur l'arête d'un meuble : la cote reste solidaire de
+      // ce meuble et se recalcule quand il bouge.
+      attach: { a: draft.attachA || null, b: draft.attachB || null },
     };
     this.layer.measures.push(measure);
     this.#changed();
@@ -910,14 +923,18 @@ export class PlanView {
       const hi = axis === 'h' ? box.y1 : box.x1;
       if (across < lo || across > hi) continue;
 
-      for (const edge of axis === 'h' ? [box.x0, box.x1] : [box.y0, box.y1]) {
+      for (const name of axis === 'h' ? ['x0', 'x1'] : ['y0', 'y1']) {
+        const edge = box[name];
         const d = Math.abs(edge - target);
         if (d >= bestD) continue;
         bestD = d;
+        // `anchor` retient le meuble et l'arête visés : c'est ce qui permettra
+        // à la cote de suivre le meuble quand il sera déplacé.
+        const attach = { id: item.id, edge: name };
         best =
           axis === 'h'
-            ? { x: edge, y: anchor.y, kind: 'edge' }
-            : { x: anchor.x, y: edge, kind: 'edge' };
+            ? { x: edge, y: anchor.y, kind: 'edge', attach }
+            : { x: anchor.x, y: edge, kind: 'edge', attach };
       }
     }
     return best;
@@ -1026,6 +1043,10 @@ export class PlanView {
       // jouer l'un après l'autre revenait à ce que le dernier écrase le
       // précédent, et la grille paraissait sans effet.
       this.#snapFurniture(hit.object);
+      // Pendant le glissement, pas seulement à son terme : une cote qui ne
+      // rattraperait le meuble qu'au lâcher donnerait une valeur fausse tout
+      // le temps du geste, précisément quand on la regarde.
+      this.#syncAttachedMeasures();
       return;
     }
 
@@ -1033,6 +1054,9 @@ export class PlanView {
     if (hit.part === 'body') {
       m.a = { x: m.a.x + dx, y: m.a.y + dy };
       m.b = { x: m.b.x + dx, y: m.b.y + dy };
+      // Emmener une cote ailleurs, c'est la détacher : sans ça elle serait
+      // ramenée sur son meuble au premier recalcul, et paraîtrait bloquée.
+      m.attach = null;
       return;
     }
 
@@ -1043,6 +1067,9 @@ export class PlanView {
     const snap = this.#snapOnAxis(anchor, axis, pdfPoint) || this.#snapGrid(constrained, axis);
     this.activeSnap = snap;
     m[hit.part] = snap ? { x: snap.x, y: snap.y } : constrained;
+    // L'extrémité reprise change d'ancre — ou en perd une si elle atterrit sur
+    // un mur ou dans le vide.
+    m.attach = { ...(m.attach || { a: null, b: null }), [hit.part]: snap?.attach || null };
 
     const lengthMm = dist(m.a, m.b) * mmPerPt(this.scale);
     this.opts.onHud?.(formatLength(lengthMm, this.unit));
@@ -1188,8 +1215,66 @@ export class PlanView {
   }
 
   #changed() {
+    this.#syncAttachedMeasures();
     this.#draw();
     this.opts.onChange?.({});
+  }
+
+  /**
+   * Recale les cotes posées sur un meuble.
+   *
+   * Une cote entre un mur et un meuble, ou entre deux meubles, n'a de sens que
+   * si elle suit le meuble : sans ça, déplacer un meuble de 10 cm laissait une
+   * cote qui affirmait toujours l'ancienne distance, sans rien signaler.
+   *
+   * Appelé depuis `#changed()`, donc après *toute* modification du calque —
+   * déplacement, rotation, redimensionnement, suppression, annulation. C'est
+   * volontaire : une liste d'appels ciblés finirait par en oublier un.
+   */
+  #syncAttachedMeasures() {
+    const layer = this.layer;
+    if (!layer?.measures?.length) return;
+
+    const boxes = new Map();
+    for (const item of layer.furniture) boxes.set(item.id, this.#furnitureBox(item));
+
+    for (const m of layer.measures) {
+      if (!m.attach) continue;
+      const axis = m.axis || 'h';
+
+      // Le meuble a disparu : on relâche l'ancre plutôt que de traîner une
+      // référence morte. La cote reste où elle est, figée.
+      for (const end of ['a', 'b']) {
+        if (m.attach[end] && !boxes.has(m.attach[end].id)) m.attach[end] = null;
+      }
+      if (!m.attach.a && !m.attach.b) continue;
+
+      // Réorientation : le trait de cote doit continuer de traverser le meuble
+      // qu'il désigne, sinon il pointerait une arête qu'il ne rencontre plus.
+      // On le ramène dans l'emprise commune aux meubles ancrés.
+      let lo = -Infinity;
+      let hi = Infinity;
+      for (const end of ['a', 'b']) {
+        const box = m.attach[end] && boxes.get(m.attach[end].id);
+        if (!box) continue;
+        lo = Math.max(lo, axis === 'h' ? box.y0 : box.x0);
+        hi = Math.min(hi, axis === 'h' ? box.y1 : box.x1);
+      }
+      if (lo <= hi) {
+        const across = clamp(axis === 'h' ? m.a.y : m.a.x, lo, hi);
+        if (axis === 'h') m.a.y = m.b.y = across;
+        else m.a.x = m.b.x = across;
+      }
+
+      // Puis chaque extrémité ancrée reprend la position de son arête.
+      for (const end of ['a', 'b']) {
+        const attach = m.attach[end];
+        if (!attach) continue;
+        const value = boxes.get(attach.id)[attach.edge];
+        if (axis === 'h') m[end].x = value;
+        else m[end].y = value;
+      }
+    }
   }
 }
 

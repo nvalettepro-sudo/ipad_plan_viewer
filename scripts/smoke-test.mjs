@@ -631,11 +631,91 @@ try {
     `x = ${onFurniture.b.x.toFixed(2)} (arête à ${furnitureEdge.right.toFixed(2)})`,
   );
   await page.click('#tool-pan');
+
+  // ── La cote suit le meuble qu'elle désigne ────────────────────────────
+  // Une cote entre un mur et un meuble n'a de sens que si elle se recalcule
+  // quand le meuble bouge : sinon elle affirme l'ancienne distance sans rien
+  // signaler. On déplace le meuble de 30 pt et on vérifie la cote.
+  const attached = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const m = v.layer.measures[v.layer.measures.length - 1];
+    return { attach: structuredClone(m.attach), a: { ...m.a }, b: { ...m.b } };
+  });
+  check(
+    'La cote mémorise le meuble et l’arête visés',
+    attached.attach?.b?.edge === 'x1' && typeof attached.attach.b.id === 'string' && !attached.attach.a,
+    JSON.stringify(attached.attach),
+  );
+
+  const followed = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const f = v.layer.furniture[0];
+    f.cx += 30; // le meuble s'écarte du mur
+    v.refreshLayer();
+    const m = v.layer.measures[v.layer.measures.length - 1];
+    const perMm = 1 / (25.4 / 72) / v.layer.scale.ratio;
+    return { a: { ...m.a }, b: { ...m.b }, right: f.cx + (f.lengthMm * perMm) / 2 };
+  });
+  check(
+    'Meuble déplacé : la cote suit son arête',
+    Math.abs(followed.b.x - followed.right) < 0.01 &&
+      Math.abs(followed.b.x - attached.b.x - 30) < 0.01,
+    `extrémité ${attached.b.x.toFixed(2)} → ${followed.b.x.toFixed(2)} (arête à ${followed.right.toFixed(2)})`,
+  );
+  check(
+    'L’extrémité posée sur le mur, elle, ne bouge pas',
+    Math.abs(followed.a.x - attached.a.x) < 0.01,
+    `x = ${followed.a.x.toFixed(2)}`,
+  );
+
+  // Déplacé perpendiculairement, le trait de cote se réoriente pour continuer
+  // de traverser le meuble, au lieu de pointer une arête qu'il ne touche plus.
+  const reoriented = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const f = v.layer.furniture[0];
+    const perMm = 1 / (25.4 / 72) / v.layer.scale.ratio;
+    f.cy += 200; // bien au-delà de la demi-hauteur du meuble
+    v.refreshLayer();
+    const m = v.layer.measures[v.layer.measures.length - 1];
+    return {
+      y: m.a.y,
+      top: f.cy + (f.widthMm * perMm) / 2,
+      bottom: f.cy - (f.widthMm * perMm) / 2,
+      horizontal: Math.abs(m.a.y - m.b.y) < 1e-9,
+    };
+  });
+  check(
+    'Meuble éloigné : le trait de cote le rattrape',
+    reoriented.horizontal &&
+      reoriented.y >= reoriented.bottom - 0.01 &&
+      reoriented.y <= reoriented.top + 0.01,
+    `y = ${reoriented.y.toFixed(2)} dans [${reoriented.bottom.toFixed(2)} ; ${reoriented.top.toFixed(2)}]`,
+  );
+
+  // Le meuble supprimé, la cote se fige au lieu de garder une référence morte.
+  const orphaned = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const before = { ...v.layer.measures[v.layer.measures.length - 1].b };
+    const keep = structuredClone(v.layer.furniture);
+    v.layer.furniture = [];
+    v.refreshLayer();
+    const m = v.layer.measures[v.layer.measures.length - 1];
+    const after = { ...m.b, attach: structuredClone(m.attach) };
+    v.layer.furniture = keep; // on rend l'état attendu par la suite
+    v.refreshLayer();
+    return { before, after };
+  });
+  check(
+    'Meuble supprimé : la cote se fige et relâche son ancre',
+    !orphaned.after.attach.b && Math.abs(orphaned.after.x - orphaned.before.x) < 0.01,
+  );
+
   await page.evaluate(() => {
     const v = window.planViewer.view;
+    Object.assign(v.layer.furniture[0], { cx: 300, cy: 420 });
     v.layer.measures.pop(); // on rend l'état attendu par la suite
     v.select(null);
-    v.refresh();
+    v.refreshLayer();
   });
 
   // ── Grille : origine visible, déplaçable, accrochée aux angles ────────

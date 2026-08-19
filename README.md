@@ -314,6 +314,20 @@ posés** comptent comme des traits : on cote donc aussi bien d'un mur à un
 meuble que de mur à mur. Décochez **Accrochage** pour retrouver un placement
 libre (indispensable sur un PDF scanné).
 
+**Une cote posée sur un meuble le suit.** Quand une extrémité se pose sur
+l'arête d'un meuble, la cote retient *quel* meuble et *quelle* arête. Déplacer,
+tourner ou redimensionner ce meuble recalcule la cote aussitôt — pendant le
+glissement, pas seulement au lâcher. Sans ça, une cote affirmait tranquillement
+l'ancienne distance après un déplacement, sans rien signaler : le pire des
+comportements pour un outil de mesure.
+
+Si le meuble s'éloigne perpendiculairement au point que le trait de cote ne le
+traverse plus, ce trait le rattrape — il se recale dans l'emprise du meuble
+plutôt que de désigner une arête qu'il ne rencontre plus. Deux gestes détachent
+volontairement une cote : faire glisser son corps ailleurs, ou reprendre son
+extrémité pour la poser sur autre chose. Un meuble supprimé fige simplement les
+cotes qui le visaient.
+
 **La grille a une origine visible et déplaçable.** Quand elle est affichée, un
 point bleu cerclé de blanc — la même poignée que sur les angles des meubles —
 marque le point d'où part le quadrillage, avec deux amorces d'axes en
