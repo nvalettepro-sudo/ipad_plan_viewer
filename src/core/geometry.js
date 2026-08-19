@@ -90,6 +90,37 @@ export function uid() {
 }
 
 /**
+ * Découpe d'une longueur en tasseaux : position et largeur de chaque pièce.
+ *
+ * Sert au tracé comme au comptage, pour que le nombre affiché soit toujours
+ * celui des bandes réellement dessinées.
+ */
+function bandRuns(w, solidPt, gapPt) {
+  const period = solidPt + gapPt;
+  if (!(solidPt > 0) || !(period > 0) || !(w > 0)) return [];
+  const runs = [];
+  for (let start = 0; start < w - 1e-9; start += period) {
+    // Le dernier tasseau est coupé net par le bord : une pièce de bois ne
+    // dépasse pas du meuble.
+    const width = Math.min(start + solidPt, w) - start;
+    if (width > 1e-9) runs.push({ start, width });
+  }
+  return runs;
+}
+
+/**
+ * Nombre de tasseaux sur une longueur donnée.
+ *
+ * Volontairement sans le garde-fou de `hatchBands` : si le pas saisi est si
+ * fin que le motif devient intraçable, mieux vaut annoncer « 1 500 tasseaux »
+ * — l'utilisateur comprend alors pourquoi plus rien ne s'affiche — que de ne
+ * rien dire du tout.
+ */
+export function hatchBandCount(w, solidPt, gapPt) {
+  return bandRuns(w, solidPt, gapPt).length;
+}
+
+/**
  * Bandes de hachures d'un rectangle orienté, en coordonnées PDF.
  *
  * Sert à figurer une ossature — des tasseaux de 3 cm espacés de 3 cm, par
@@ -107,28 +138,19 @@ export function uid() {
  *   coûteux à tracer, on renonce plutôt que de figer l'affichage.
  */
 export function hatchBands(cx, cy, w, h, rotDeg, solidPt, gapPt, maxBands = 400) {
-  const period = solidPt + gapPt;
-  if (!(solidPt > 0) || !(period > 0) || !(w > 0) || !(h > 0)) return [];
-  if (w / period > maxBands) return [];
+  const runs = bandRuns(w, solidPt, gapPt);
+  if (!runs.length || runs.length > maxBands || !(h > 0)) return [];
 
   const [origin, right, , top] = rectCorners(cx, cy, w, h, rotDeg);
   const ux = { x: (right.x - origin.x) / w, y: (right.y - origin.y) / w };
   const uy = { x: (top.x - origin.x) / h, y: (top.y - origin.y) / h };
 
-  const bands = [];
-  for (let start = 0; start < w - 1e-9; start += period) {
-    // Le dernier tasseau est coupé net par le bord : une pièce de bois ne
-    // dépasse pas du meuble.
-    const width = Math.min(start + solidPt, w) - start;
-    if (width <= 1e-9) continue;
-    bands.push({
-      x: origin.x + ux.x * start,
-      y: origin.y + ux.y * start,
-      width,
-      height: h,
-      ux,
-      uy,
-    });
-  }
-  return bands;
+  return runs.map((run) => ({
+    x: origin.x + ux.x * run.start,
+    y: origin.y + ux.y * run.start,
+    width: run.width,
+    height: h,
+    ux,
+    uy,
+  }));
 }

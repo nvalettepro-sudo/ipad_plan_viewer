@@ -7,7 +7,7 @@
  */
 
 import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
-import { hatchBands, rectCorners } from '../core/geometry.js';
+import { hatchBandCount, hatchBands, rectCorners } from '../core/geometry.js';
 import { formatLength, mmPerPt } from '../core/units.js';
 
 const MEASURE_RGB = [0.84, 0.16, 0.16];
@@ -138,12 +138,18 @@ function drawLayerOnPage(page, layer, { font, unit, showDimensions = true }) {
           height: band.height,
           rotate: degrees(item.rot),
           color: toRgb(color),
-          opacity: 0.35,
+          // Opaques, comme à l'écran : une pièce pleine masque ce qu'elle
+          // recouvre, et se distingue ainsi du vide qui laisse voir le plan.
+          opacity: 1,
         });
       }
     }
 
-    const dims = `${formatLength(item.lengthMm, unit)} x ${formatLength(item.widthMm, unit)}`;
+    let dims = `${formatLength(item.lengthMm, unit)} x ${formatLength(item.widthMm, unit)}`;
+    if (item.hatch) {
+      const n = hatchBandCount(w, item.hatch.solidMm * perMm, item.hatch.gapMm * perMm);
+      if (n) dims += ` - ${n} tasseau${n > 1 ? 'x' : ''}`;
+    }
     if (item.label && showDimensions) {
       const up = rotateVec(0, TEXT_SIZE * 0.75, pageRotation);
       drawCenteredText(page, font, item.label, item.cx + up.x, item.cy + up.y, {

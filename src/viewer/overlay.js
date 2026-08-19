@@ -7,7 +7,7 @@
  * attendu d'une annotation.
  */
 
-import { hatchBands, rectCorners } from '../core/geometry.js';
+import { hatchBandCount, hatchBands, rectCorners } from '../core/geometry.js';
 import { formatLength, mmPerPt } from '../core/units.js';
 
 export const MEASURE_COLOR = '#d62828';
@@ -192,7 +192,8 @@ export function drawFurniture(ctx, vp, item, { scale, unit, selected = false, sh
   ctx.stroke();
 
   const center = vp.toScreen(item.cx, item.cy);
-  const dims = `${formatLength(item.lengthMm, unit)} × ${formatLength(item.widthMm, unit)}`;
+  const dims = `${formatLength(item.lengthMm, unit)} × ${formatLength(item.widthMm, unit)}`
+    + hatchSuffix(item, w);
 
   // Place disponible à l'intérieur du rectangle, à l'écran. Les rotations
   // étant des multiples de 90°, la boîte englobante des quatre coins projetés
@@ -232,6 +233,18 @@ export function drawFurniture(ctx, vp, item, { scale, unit, selected = false, sh
 }
 
 /**
+ * Complément d'étiquette annonçant le nombre de tasseaux. Il s'ajoute aux
+ * dimensions plutôt que d'occuper une troisième ligne : un rectangle a déjà
+ * rarement la place pour deux.
+ */
+export function hatchSuffix(item, w) {
+  if (!item.hatch) return '';
+  const ptPerMm = w / item.lengthMm;
+  const n = hatchBandCount(w, item.hatch.solidMm * ptPerMm, item.hatch.gapMm * ptPerMm);
+  return n ? ` · ${n} tasseau${n > 1 ? 'x' : ''}` : '';
+}
+
+/**
  * Tasseaux : bandes pleines réparties sur la longueur du rectangle.
  * Les quatre coins de chaque bande sont projetés séparément, si bien que la
  * rotation du meuble comme celle de la page sont prises en compte sans cas
@@ -248,7 +261,10 @@ function drawHatch(ctx, vp, item, w, h) {
 
   ctx.save();
   ctx.clip(); // le chemin courant est encore celui du rectangle
-  ctx.fillStyle = hexToRgba(item.color, 0.55);
+  // Opaques : un tasseau est une pièce pleine, il masque ce qu'il recouvre.
+  // C'est aussi ce qui le distingue nettement du vide entre deux pièces, qui
+  // laisse voir le plan.
+  ctx.fillStyle = item.color;
   for (const b of bands) {
     const pts = [
       [0, 0],

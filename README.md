@@ -271,9 +271,19 @@ cochez *Tasseaux* dans le volet d'édition, puis donnez la largeur d'une pièce 
 celle du vide entre deux — 3 cm et 3 cm pour un claustra courant. Les bandes se
 répartissent sur la longueur du rectangle et suivent sa rotation, comme le
 feraient de vraies pièces de bois ; la dernière est coupée net par le bord,
-puisqu'un tasseau ne dépasse pas du meuble. Le motif est reproduit à l'identique
-dans le PDF exporté. Trop dézoomé, il se confondrait en un aplat gris : le
-rectangle est alors rendu nu, même règle que pour les étiquettes.
+puisqu'un tasseau ne dépasse pas du meuble. Elles sont **opaques** : une pièce
+pleine masque ce qu'elle recouvre, et se distingue ainsi du vide, qui laisse
+voir le plan. Le motif est reproduit à l'identique dans le PDF exporté. Trop
+dézoomé, il se confondrait en un aplat : le rectangle est alors rendu nu, même
+règle que pour les étiquettes.
+
+Le **nombre de tasseaux** est affiché dans le volet d'édition, à côté du pas
+qui le commande, et s'ajoute aux dimensions sur l'étiquette du rectangle
+(« 3,00 m × 60 cm · 50 tasseaux »). Il est calculé par la fonction qui trace
+les bandes, de sorte qu'il ne peut pas annoncer autre chose que ce qui est
+dessiné. Seule exception assumée : un pas si fin que le motif devient
+intraçable est quand même compté — annoncer « 1 500 tasseaux » explique
+pourquoi plus rien ne s'affiche, se taire n'expliquerait rien.
 
 **Les étiquettes s'effacent au lieu de grossir.** Nom, dimensions et valeurs de
 cote gardent une taille constante à l'écran : c'est ce qu'on attend d'une

@@ -5,7 +5,7 @@
  * évite tout état résiduel entre un meuble et une cote.
  */
 
-import { dist } from '../core/geometry.js';
+import { dist, hatchBandCount } from '../core/geometry.js';
 import { formatLength, fromMm, mmPerPt, toMm } from '../core/units.js';
 import { FURNITURE_COLORS } from '../viewer/overlay.js';
 
@@ -81,6 +81,7 @@ export function renderInspector(view, dom, onChange) {
         unitLabel,
         numberInput(fromMm(object.lengthMm, unit), (v) => {
           view.updateSelected({ lengthMm: toMm(v, unit) });
+          syncHatchCount(); // la longueur commande le nombre de tasseaux
           onChange();
         }),
       ),
@@ -109,12 +110,29 @@ export function renderInspector(view, dom, onChange) {
 
     const solid = numberInput(fromMm(hatch.solidMm, unit), (v) => {
       view.updateSelected({ hatch: { ...currentHatch(), solidMm: toMm(v, unit) } });
+      syncHatchCount();
       onChange();
     });
     const gap = numberInput(fromMm(hatch.gapMm, unit), (v) => {
       view.updateSelected({ hatch: { ...currentHatch(), gapMm: toMm(v, unit) } });
+      syncHatchCount();
       onChange();
     });
+
+    // Le compte figure aussi sur l'étiquette du rectangle, mais celle-ci
+    // s'efface dès qu'elle ne tient plus : ici il reste lisible à tout zoom,
+    // et c'est ici qu'on règle le pas, donc ici qu'on veut voir l'effet.
+    const count = document.createElement('strong');
+    const syncHatchCount = () => {
+      const item = view.getSelected();
+      if (!item?.hatch) {
+        count.textContent = '—';
+        return;
+      }
+      const n = hatchBandCount(item.lengthMm, item.hatch.solidMm, item.hatch.gapMm);
+      count.textContent = `${n} tasseau${n > 1 ? 'x' : ''}`;
+    };
+
     const syncHatchInputs = () => {
       solid.disabled = !toggle.checked;
       gap.disabled = !toggle.checked;
@@ -126,13 +144,16 @@ export function renderInspector(view, dom, onChange) {
           : null,
       });
       syncHatchInputs();
+      syncHatchCount();
       onChange();
     });
     syncHatchInputs();
+    syncHatchCount();
 
     dom.body.append(row('Tasseaux', toggle));
     dom.body.append(row(`Plein (${unit})`, solid));
     dom.body.append(row(`Vide (${unit})`, gap));
+    dom.body.append(row('Nombre', count));
 
     const swatches = document.createElement('div');
     swatches.className = 'swatches';

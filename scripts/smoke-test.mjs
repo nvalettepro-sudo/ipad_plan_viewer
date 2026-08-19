@@ -11,7 +11,7 @@
 
 import { spawn } from 'node:child_process';
 import { PDFDocument } from 'pdf-lib';
-import { hatchBands } from '../src/core/geometry.js';
+import { hatchBandCount, hatchBands } from '../src/core/geometry.js';
 import { launchBrowser } from './browser.mjs';
 import { makeTestPlan } from './make-test-plan.mjs';
 
@@ -393,6 +393,17 @@ try {
     'Tasseaux : motif trop dense pour être lisible, on renonce',
     hatchBands(300, 420, rectW, 900 * perMm, 0, 0.001, 0.001).length === 0,
   );
+  // Le compte se calcule en millimètres réels, indépendamment de l'échelle.
+  check(
+    'Tasseaux : le compte suit les bandes tracées',
+    hatchBandCount(2000, 300, 300) === list.length && hatchBandCount(3000, 30, 30) === 50,
+    `${hatchBandCount(2000, 300, 300)} sur 2 m en 30/30 cm, ${hatchBandCount(3000, 30, 30)} sur 3 m en 3/3 cm`,
+  );
+  check(
+    'Tasseaux : un motif intraçable annonce quand même son compte',
+    hatchBandCount(3000, 1, 1) === 1500,
+    `${hatchBandCount(3000, 1, 1)} tasseaux`,
+  );
 
   // Rendus à l'écran : on compte les pixels de la couleur du meuble sur une
   // ligne traversant le rectangle. Sans hachures, la teinte est uniforme ;
@@ -463,9 +474,34 @@ try {
     exportAvecHachures > exportSansHachures,
     `${exportSansHachures} o sans, ${exportAvecHachures} o avec`,
   );
+  // Le compte s'affiche dans le volet d'édition, où il reste lisible quel que
+  // soit le zoom — l'étiquette du rectangle, elle, s'efface quand elle déborde.
+  const counter = await page.evaluate(() => {
+    const v = window.planViewer.view;
+    const f = v.layer.furniture[0];
+    Object.assign(f, { lengthMm: 2000, widthMm: 900, hatch: { solidMm: 300, gapMm: 300 } });
+    v.select({ type: 'furniture', id: f.id });
+    const read = () =>
+      [...document.querySelectorAll('#inspector-body .row')]
+        .map((r) => r.textContent.trim())
+        .find((t) => t.startsWith('Nombre'));
+    const withHatch = read();
+    v.updateSelected({ hatch: null });
+    v.select(null);
+    v.select({ type: 'furniture', id: f.id });
+    return { withHatch, without: read() };
+  });
+  check(
+    'Tasseaux : le volet annonce leur nombre',
+    counter.withHatch === 'Nombre4 tasseaux' && counter.without === 'Nombre—',
+    `« ${counter.withHatch} » puis « ${counter.without} »`,
+  );
+
   await page.evaluate(() => {
-    window.planViewer.view.layer.furniture[0].hatch = null;
-    window.planViewer.view.refreshLayer();
+    const v = window.planViewer.view;
+    v.select(null);
+    v.layer.furniture[0].hatch = null;
+    v.refreshLayer();
   });
 
   // ── Étiquettes qui débordent : elles disparaissent ────────────────────
