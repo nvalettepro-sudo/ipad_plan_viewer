@@ -38,7 +38,7 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  // On ne touche pas au cross-origin (Google Identity, Picker, API Drive).
+  // On ne touche pas au cross-origin : le cache ne couvre que l'app elle-même.
   if (url.origin !== self.location.origin) return;
 
   // Navigation : on sert l'app shell depuis le cache (mode standalone hors ligne),

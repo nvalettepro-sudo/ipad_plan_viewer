@@ -6,11 +6,10 @@ dist/
 dist-ssr/
 .vite/
 
-# Configuration locale (clés Google, etc.)
+# Configuration locale
 .env
 .env.local
 .env.*.local
-!.env.example
 
 # Hébergeurs
 .netlify/

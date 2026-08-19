@@ -15,7 +15,6 @@ import {
   saveLayers,
 } from './core/store.js';
 import { calibrationScale, effectiveRatio, formatScale, mmPerPt, toMm } from './core/units.js';
-import { DriveClient } from './drive/google.js';
 import { buildAnnotatedPdf, exportFileName } from './export/exportPdf.js';
 import { loadPdfDocument } from './pdf/loader.js';
 import { renderThumbnails } from './pdf/thumbnails.js';
@@ -35,8 +34,6 @@ const state = {
   vectorSegments: null,
   swVersion: null,
 };
-
-const drive = new DriveClient();
 
 /**
  * Voile d'attente. L'extraction des tracés d'une planche A3 chargée prend ~1 s
@@ -142,10 +139,6 @@ async function boot() {
   const showDims = await getSetting('showFurnitureDims', true);
   $('chk-dims').checked = showDims;
   view.setShowDimensions(showDims);
-
-  // Préchargement Google : indispensable pour que le tap « Drive » puisse
-  // ouvrir la popup sans attente (contrainte iPad n°2).
-  drive.preload().catch((err) => console.warn('Google non préchargé', err));
 
   await restoreLastPlan();
   await refreshRecentList();
@@ -277,28 +270,6 @@ function handleFilePick(file) {
     .catch((err) => toast(`Lecture impossible : ${err.message}`, { error: true }));
 }
 
-/**
- * Import Drive. Appelée *directement* depuis le gestionnaire de clic :
- * aucun `await` ne doit précéder `drive.requestFile()`.
- */
-function handleDriveImport() {
-  let request;
-  try {
-    request = drive.requestFile();
-  } catch (err) {
-    toast(err.message, { error: true });
-    return;
-  }
-  request
-    .then((file) => {
-      if (!file) return null;
-      return importPdf(file.name, file.bytes, { type: 'drive', fileId: file.fileId });
-    })
-    .catch((err) => {
-      console.error(err);
-      toast(err.message, { error: true });
-    });
-}
 
 // ─────────────────────────────────────────────────────────────────────────
 // Interface
@@ -313,8 +284,6 @@ function wireUi() {
   const openFile = () => $('file-input').click();
   $('btn-open').addEventListener('click', openFile);
   $('empty-open').addEventListener('click', openFile);
-  $('btn-drive').addEventListener('click', handleDriveImport);
-  $('empty-drive').addEventListener('click', handleDriveImport);
 
   // Outils
   for (const btn of document.querySelectorAll('.tool')) {
@@ -327,8 +296,9 @@ function wireUi() {
   $('btn-export').addEventListener('click', () => exportPdf());
   $('btn-menu').addEventListener('click', () => openMenu());
   // Écouteur en phase de bouillonnement : les gestionnaires des boutons ont
-  // déjà tourné quand il ferme le menu. C'est ce qui permet à « Drive »
-  // d'ouvrir sa popup dans le même geste utilisateur.
+  // déjà tourné quand il ferme le menu. C'est ce qui laisse « Ouvrir un
+  // fichier » déclencher le sélecteur dans le même geste utilisateur — iOS
+  // n'ouvre le sélecteur que depuis un tap non interrompu.
   $('dlg-menu').addEventListener('click', (e) => {
     if (e.target.closest('.menu-list button')) $('dlg-menu').close();
   });
@@ -392,7 +362,6 @@ function wireUi() {
   wireScaleDialog();
   wireFurnitureDialog();
   wireMenuDialog();
-  wireGoogleDialog();
   wireExportDialog();
 }
 
@@ -753,10 +722,6 @@ function wireMenuDialog() {
       toast('Annotations effacées.');
     }
   });
-  $('menu-google').addEventListener('click', () => {
-    $('dlg-menu').close();
-    openGoogleDialog();
-  });
   $('menu-storage').addEventListener('click', async () => {
     $('dlg-menu').close();
     const estimate = await storageEstimate();
@@ -939,30 +904,6 @@ async function showPage(index) {
   // Une page jamais calibrée hérite d'une échelle *supposée* : on demande
   // confirmation plutôt que de laisser mesurer avec une valeur héritée.
   if (!currentLayer().scaleSet) openScaleDialog({ firstTime: true });
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Configuration Google
-// ─────────────────────────────────────────────────────────────────────────
-
-function wireGoogleDialog() {
-  $('g-origin').textContent = `Origine à autoriser dans Google Cloud : ${location.origin}`;
-}
-
-async function openGoogleDialog() {
-  const config = await drive.loadConfig();
-  $('g-client-id').value = config.clientId || '';
-  $('g-api-key').value = config.apiKey || '';
-  $('g-app-id').value = config.appId || '';
-
-  if ((await openDialog($('dlg-google'))) !== 'ok') return;
-
-  await drive.saveConfig({
-    clientId: $('g-client-id').value.trim(),
-    apiKey: $('g-api-key').value.trim(),
-    appId: $('g-app-id').value.trim(),
-  });
-  toast(drive.isConfigured ? 'Configuration Google enregistrée.' : 'Configuration incomplète.');
 }
 
 // ─────────────────────────────────────────────────────────────────────────

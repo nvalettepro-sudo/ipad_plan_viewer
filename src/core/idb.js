@@ -4,7 +4,7 @@
  * Trois magasins :
  *  - `plans`    : le PDF d'origine + ses métadonnées (écrit une fois à l'import)
  *  - `layers`   : les annotations (réécrites à chaque sauvegarde automatique)
- *  - `settings` : préférences et configuration Google
+ *  - `settings` : préférences (dernier plan ouvert, affichage des cotes…)
  *
  * Séparer les calques du PDF évite de réécrire plusieurs Mo à chaque
  * déplacement d'un meuble.

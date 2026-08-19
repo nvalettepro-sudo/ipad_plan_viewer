@@ -37,9 +37,6 @@ jobs:
       - name: Build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
-          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
-          VITE_GOOGLE_API_KEY: ${{ secrets.VITE_GOOGLE_API_KEY }}
-          VITE_GOOGLE_APP_ID: ${{ secrets.VITE_GOOGLE_APP_ID }}
         run: npm run build
 
       # ⚠️ Étape manuelle, à faire UNE FOIS avant le premier déploiement :

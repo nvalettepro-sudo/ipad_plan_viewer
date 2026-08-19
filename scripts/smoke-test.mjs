@@ -1074,7 +1074,7 @@ try {
   await phonePage.click('#btn-menu');
   await phonePage.waitForFunction(() => document.getElementById('dlg-menu').open, null, { timeout: 5_000 });
   const menuEntries = await phonePage.evaluate(() =>
-    ['btn-open', 'btn-drive', 'btn-fit', 'btn-scale', 'btn-export', 'menu-page', 'menu-clear']
+    ['btn-open', 'btn-fit', 'btn-scale', 'btn-export', 'menu-page', 'menu-clear']
       .filter((id) => {
         const el = document.getElementById(id);
         return el && el.closest('#dlg-menu') && el.getBoundingClientRect().height > 0;
@@ -1082,7 +1082,7 @@ try {
   );
   check(
     'iPhone : les commandes secondaires sont dans le menu',
-    menuEntries.length === 7,
+    menuEntries.length === 6,
     menuEntries.join(', '),
   );
 

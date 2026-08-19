@@ -2,8 +2,8 @@
 https://nvalettepro-sudo.github.io/ipad_plan_viewer/
 
 PWA mono-utilisateur pour **visualiser, mesurer et annoter des plans d'architecture
-PDF** sur iPad, à échelle connue (1/50, 1/100, …), avec import depuis Google Drive
-et export du plan annoté sans perte.
+PDF** sur iPad, à échelle connue (1/50, 1/100, …), avec import depuis l'app
+Fichiers et export du plan annoté sans perte.
 
 Installée sur l'écran d'accueil, elle fonctionne hors ligne et conserve le travail
 entre les sessions.
@@ -18,8 +18,7 @@ entre les sessions.
 | Mobilier : rectangles cotés en dimensions réelles, rotation 90°, couleur, étiquette | ✅ |
 | Sauvegarde locale automatique (IndexedDB + stockage persistant) | ✅ |
 | Export PDF annoté (superposition sur le PDF d'origine, échelle native conservée) | ✅ |
-| Import Google Drive (Picker + `drive.file`) | ✅ |
-| Sauvegarde de secours vers Drive (JSON de calques) | ⏳ v2 |
+| Import depuis l'app **Fichiers** (iCloud, Drive, OneDrive, Dropbox, local) | ✅ |
 
 ---
 
@@ -30,7 +29,6 @@ entre les sessions.
 | Rendu PDF | [PDF.js](https://mozilla.github.io/pdf.js/) | Rendu **et** accès aux tracés vectoriels, nécessaire à l'accrochage |
 | Export annoté | [pdf-lib](https://pdf-lib.js.org/) | Écrit les annotations dans l'espace utilisateur du PDF d'origine : aucune rastérisation, échelle conservée |
 | Stockage | IndexedDB + `navigator.storage.persist()` | Survit à la fermeture de l'app ; `persist()` évite la purge Safari |
-| Import Drive | Google Identity Services + Picker API | `gapi.auth2` est déprécié et n'est pas utilisé |
 | Build | Vite | Empaquette le worker PDF.js, hashe les assets, génère le service worker |
 
 Aucun framework d'interface : du DOM et un `<canvas>`, c'est suffisant et ça évite
@@ -59,7 +57,6 @@ src/
   pdf/        loader.js (init PDF.js), vector.js (extraction des tracés + index d'accrochage)
   viewer/     planview.js (composant central), viewport.js, renderer.js,
               gestures.js, overlay.js
-  drive/      google.js (OAuth + Picker + téléchargement)
   export/     exportPdf.js (superposition pdf-lib)
   pwa/        updates.js (service worker + bandeau de mise à jour)
   ui/         ui.js, inspector.js
@@ -75,8 +72,8 @@ npm install
 npm run dev          # http://localhost:5173
 ```
 
-Sans configuration Google, tout fonctionne sauf l'import Drive : utilisez le bouton
-**Ouvrir** pour charger un PDF depuis le disque.
+Aucune configuration, aucun compte : le bouton **Ouvrir un fichier** charge un
+PDF depuis le disque.
 
 > En développement, le service worker n'est **pas** enregistré (c'est volontaire :
 > il masquerait les modifications). Pour tester le comportement PWA réel :
@@ -120,18 +117,14 @@ Le workflow [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-page
 publie à chaque `push` sur la **branche par défaut** du dépôt, quel que soit son nom.
 
 1. Dépôt → **Settings → Pages → Source : GitHub Actions**.
-2. Optionnel, pour préremplir les identifiants Google : **Settings → Secrets and
-   variables → Actions**, ajouter `VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_API_KEY`,
-   `VITE_GOOGLE_APP_ID`.
-3. `git push` → l'URL est `https://<utilisateur>.github.io/<dépôt>/`.
+2. `git push` → l'URL est `https://<utilisateur>.github.io/<dépôt>/`.
 
 Le workflow positionne `BASE_PATH=/<dépôt>/` : indispensable, sinon les assets et
 le service worker renvoient des 404 sous GitHub Pages.
 
 > ⚠️ **Dépôt privé + GitHub Pages** : sur un compte GitHub Free, Pages ne publie
-> que depuis un dépôt **public**. Si vous passez le dépôt en privé (recommandé
-> pour ne pas exposer la configuration), déployez plutôt sur **Netlify** ou
-> **Vercel** : leurs offres gratuites acceptent les dépôts privés.
+> que depuis un dépôt **public**. Pour un dépôt privé, déployez plutôt sur
+> **Netlify** ou **Vercel** : leurs offres gratuites les acceptent.
 >
 > Notez que dans tous les cas, l'application publiée est accessible à qui
 > connaît l'URL : ce sont vos *plans importés* qui restent privés, puisqu'ils ne
@@ -142,8 +135,8 @@ le service worker renvoient des 404 sous GitHub Pages.
 Connecter le dépôt suffit ; [`netlify.toml`](netlify.toml) et
 [`vercel.json`](vercel.json) fixent déjà la commande de build, le dossier `dist`
 et les en-têtes de cache (notamment `sw.js` en `no-cache`, sinon la détection de
-mise à jour peut avoir 24 h de retard). Variables d'environnement à renseigner
-dans l'interface de l'hébergeur : voir [`.env.example`](.env.example).
+mise à jour peut avoir 24 h de retard). Aucune variable d'environnement à
+renseigner : l'app ne dépend d'aucun service tiers.
 
 ---
 
@@ -156,8 +149,7 @@ dans l'interface de l'hébergeur : voir [`.env.example`](.env.example).
 4. Confirmer le nom → **Ajouter**.
 5. **Lancer l'app depuis son icône**, jamais depuis Safari : c'est ce mode
    *standalone* qui active la persistance des données.
-6. Au premier lancement : accepter le stockage persistant, puis se connecter à
-   Google Drive si vous l'utilisez.
+6. Au premier lancement : accepter le stockage persistant.
 
 Le menu **⋯ → État du stockage** indique à tout moment si le stockage est
 persistant et si l'app tourne bien en mode standalone.
@@ -190,42 +182,31 @@ mesure en cours.
 
 ---
 
-## Configuration Google Drive
+## Import des plans : l'app Fichiers, et rien d'autre
 
-Les identifiants peuvent être saisis **dans l'app** (menu ⋯ → *Configuration
-Google Drive…*, stockés sur l'appareil) ou injectés au build via `.env`
-(voir [`.env.example`](.env.example)). Le code étant 100 % côté navigateur, ces
-valeurs sont de toute façon visibles : la protection repose sur la restriction
-par domaine.
+L'import passe par un `<input type="file">`, donc par le sélecteur natif d'iOS.
+C'est délibéré, et c'est ce qui remplace une intégration Google Drive qui a
+existé ici puis a été retirée.
 
-Dans la [console Google Cloud](https://console.cloud.google.com/) :
+**Ce que ça apporte :** le sélecteur d'iOS liste *tous* les espaces de stockage
+déclarés sur l'appareil — iCloud Drive, Google Drive, OneDrive, Dropbox, le
+stockage local, un serveur SMB. Un seul bouton les couvre tous, et un nouveau
+service branché sur l'iPad y apparaît sans qu'on touche au code.
 
-1. Créer un projet, activer **Google Drive API** et **Google Picker API**.
-2. Écran de consentement OAuth : type **Externe**, statut **Test**, et
-   s'ajouter comme **utilisateur de test**.
-   → évite complètement la procédure de vérification Google, disproportionnée
-   pour un usage personnel.
-3. **Identifiants → ID client OAuth**, type *Application Web*. Ajouter l'URL
-   exacte de déploiement dans **Origines JavaScript autorisées**
-   (ex. `https://<utilisateur>.github.io`). L'app affiche l'origine à autoriser
-   dans le dialogue de configuration.
-4. **Identifiants → Clé API**. La restreindre **par référent HTTP** à l'URL de
-   déploiement : c'est ce qui empêche un tiers de la réutiliser ailleurs.
-5. Noter le **numéro du projet** (App ID), requis par le Picker.
+**Ce que ça coûte :** rien. Pas de projet Google Cloud, pas d'écran de
+consentement OAuth, pas de clé API à restreindre par domaine, pas d'identifiants
+à ressaisir sur chaque appareil, pas de jeton qui expire. Le fichier arrive dans
+le navigateur, l'app ne dialogue avec aucun service tiers.
 
-### Points de vigilance
+**Ce qu'on perd** par rapport à l'API Drive : on ne peut pas filtrer sur les
+seuls PDF à l'intérieur d'un espace distant, ni chercher dans un Drive partagé,
+et l'espace visé doit être branché sur l'appareil. En contrepartie l'app ne
+demande aucun accès à vos comptes — ce qui, pour un usage personnel, est le
+meilleur des deux côtés.
 
-- **Scope `drive.file`, pas `drive.readonly`.** `drive.file` est classé « non
-  sensible » : pas d'audit de sécurité, pas de vidéo de démo, pas de politique de
-  confidentialité à fournir. Combiné au Picker, il donne accès aux fichiers que
-  vous sélectionnez explicitement, y compris ceux que l'app n'a pas créés.
-- **Pas d'accès hors-ligne.** En mode Test, les jetons de rafraîchissement
-  expirent au bout de 7 jours. L'app demande un jeton d'accès à la volée, via
-  popup, à chaque session : ce flux n'est pas concerné par cette limite.
-- **Popup iOS.** Safari bloque la popup OAuth si elle n'est pas ouverte
-  *strictement* dans le gestionnaire de tap. Le bouton *Drive* appelle donc
-  `requestAccessToken()` sans aucun `await` en amont, et les scripts Google sont
-  préchargés au démarrage.
+> Si un espace de stockage n'apparaît pas dans le sélecteur, cela se règle dans
+> iOS et non dans l'app : **Fichiers → Parcourir → ⋯ → Modifier**, puis activer
+> le service voulu.
 
 ---
 
@@ -233,7 +214,7 @@ Dans la [console Google Cloud](https://console.cloud.google.com/) :
 
 La barre du haut tient sur **une seule rangée** et ne garde que les trois
 outils de dessin — ✋ *Naviguer*, 📏 *Mesurer*, 🛋️ *Meuble*. Tout le reste
-(ouvrir, Drive, ajuster, échelle, export, pages, réglages) vit dans le **menu
+(ouvrir, ajuster, échelle, export, pages, réglages) vit dans le **menu
 ☰**, à gauche. Sur téléphone la barre débordait sinon sur deux rangées, au
 détriment du plan. Une pastille orange sur le ☰ signale qu'une page attend
 encore sa calibration d'échelle.

@@ -73,10 +73,13 @@
 
         <div class="empty-state" id="empty-state">
           <h1>Plans d'architecture</h1>
-          <p>Importez un PDF depuis Google&nbsp;Drive ou depuis vos fichiers pour commencer.</p>
+          <p>
+            Ouvrez un PDF depuis l'app <strong>Fichiers</strong> de votre appareil :
+            elle donne accès à iCloud, Google&nbsp;Drive, OneDrive, Dropbox et au
+            stockage local, sans configuration.
+          </p>
           <div class="empty-actions">
-            <button class="btn primary" id="empty-drive" type="button">Importer depuis Drive</button>
-            <button class="btn" id="empty-open" type="button">Ouvrir un fichier</button>
+            <button class="btn primary" id="empty-open" type="button">Ouvrir un fichier</button>
           </div>
           <ul class="recent" id="recent-list" hidden></ul>
         </div>
@@ -249,7 +252,6 @@
         <h2>Menu</h2>
         <ul class="menu-list">
           <li><button class="btn wide" type="button" id="btn-open">📂 Ouvrir un fichier</button></li>
-          <li><button class="btn wide" type="button" id="btn-drive">☁️ Importer depuis Drive</button></li>
         </ul>
 
         <ul class="menu-list menu-group">
@@ -266,7 +268,6 @@
           <li><button class="btn wide" type="button" id="menu-library">🗂 Mes plans</button></li>
           <li><button class="btn wide" type="button" id="menu-page">📄 Changer de page…</button></li>
           <li><button class="btn wide" type="button" id="menu-clear">🧹 Effacer toutes les annotations</button></li>
-          <li><button class="btn wide" type="button" id="menu-google">🔑 Configuration Google Drive…</button></li>
           <li><button class="btn wide" type="button" id="menu-storage">💾 État du stockage</button></li>
           <li><button class="btn wide" type="button" id="menu-install">📲 Installer sur l'écran d'accueil</button></li>
         </ul>
@@ -284,41 +285,14 @@
       </form>
     </dialog>
 
-    <dialog class="dlg" id="dlg-google">
-      <form method="dialog">
-        <h2>Configuration Google Drive</h2>
-        <p class="hint">
-          Ces identifiants proviennent de votre projet Google&nbsp;Cloud (scope
-          <code>drive.file</code>, écran de consentement en mode « Test »). Ils sont
-          stockés uniquement sur cet appareil.
-        </p>
-        <div class="row col">
-          <label for="g-client-id">ID client OAuth</label>
-          <input type="text" id="g-client-id" placeholder="xxxxx.apps.googleusercontent.com" autocomplete="off" />
-        </div>
-        <div class="row col">
-          <label for="g-api-key">Clé API (restreinte par domaine)</label>
-          <input type="text" id="g-api-key" placeholder="AIza…" autocomplete="off" />
-        </div>
-        <div class="row col">
-          <label for="g-app-id">Numéro de projet (App ID)</label>
-          <input type="text" id="g-app-id" placeholder="123456789012" inputmode="numeric" autocomplete="off" />
-        </div>
-        <p class="hint" id="g-origin"></p>
-        <menu>
-          <button class="btn" value="cancel">Annuler</button>
-          <button class="btn primary" value="ok">Enregistrer</button>
-        </menu>
-      </form>
-    </dialog>
 
     <dialog class="dlg" id="dlg-export">
       <form method="dialog">
         <h2>PDF annoté prêt</h2>
         <p class="hint" id="export-info"></p>
         <p class="hint">
-          « Partager » ouvre la feuille iOS : vous pouvez enregistrer dans Fichiers
-          ou renvoyer le PDF vers Google&nbsp;Drive.
+          « Partager » ouvre la feuille iOS : vous pouvez enregistrer dans Fichiers,
+          d'où le PDF repart vers n'importe quel espace de stockage connecté.
         </p>
         <menu>
           <button class="btn" value="close">Fermer</button>
